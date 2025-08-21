@@ -1,0 +1,6 @@
+streamlit>=1.28.0
+python-docx>=0.8.11
+mammoth>=1.6.0
+python-decouple>=3.8
+gitpython>=3.1.40
+watchdog>=3.0.0
