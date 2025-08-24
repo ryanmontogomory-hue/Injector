@@ -2,117 +2,181 @@
 
 This file provides guidance to WARP (warp.dev) when working with code in this repository.
 
-## Project Overview
+## 📋 Essential Development Commands
 
-This is a **Resume Customizer** application built with Streamlit that automates the process of customizing multiple resumes and sending them via email. The application:
-
-1. Accepts multiple .docx resume files as input
-2. Allows users to specify tech stacks and bullet points for each resume
-3. Automatically inserts selected bullet points into the "Projects" section of each resume
-4. Sends customized resumes via email to specified recipients
-5. Provides download links for the modified resumes
-
-## Architecture
-
-### Core Components
-
-- **`app.py`**: Single-file Streamlit application containing all functionality
-  - File upload handling for multiple .docx files
-  - Text parsing using regex to extract tech stacks and bullet points
-  - Document manipulation using `python-docx` library
-  - Email sending via SMTP (Gmail)
-  - Base64 encoding for file downloads
-
-### Key Dependencies
-
-- `streamlit`: Web UI framework
-- `python-docx`: Word document manipulation
-- `smtplib`: Built-in email sending
-- `re`: Built-in regex for text parsing
-- `base64`: Built-in encoding for downloads
-- `io.BytesIO`: Built-in memory buffer handling
-
-### Data Flow
-
-1. **Input Phase**: Users upload .docx files and provide tech stack information
-2. **Parsing Phase**: Regex extracts tech stacks and bullet points from user input
-3. **Selection Phase**: Algorithm selects first 2 points per tech stack, groups into blocks of 6
-4. **Document Modification**: Finds "Projects" heading and inserts bullet points
-5. **Output Phase**: Saves to memory buffer, emails attachment, provides download
-
-## Development Commands
-
-### Running the Application
-```powershell
-# Install dependencies (no requirements.txt exists, install manually)
-pip install streamlit python-docx
-
-# Run the Streamlit application
+### Quick Start & Development
+```bash
+# Development setup
+pip install -r requirements.txt
 streamlit run app.py
+
+# Test streamlit app basics
+python test_streamlit_app.py  # Basic functionality tests
 ```
 
-### Development Workflow
-```powershell
-# Check application health
-streamlit run app.py --server.headless true --server.port 8501
+### Testing & Validation
+```bash
+# Validate setup and dependencies
+python -c "import streamlit; from docx import Document; print('Core dependencies OK')"
 
-# For development with auto-reload
-streamlit run app.py --server.runOnSave true
+# Test bulk processing functionality
+python -c "from concurrent.futures import ThreadPoolExecutor; print('Parallel processing OK')"
 ```
 
-## Critical Implementation Details
+## 🏗️ Architecture Overview
 
-### Text Parsing Logic
-The application uses a specific regex pattern to parse tech stack input:
-```regex
-(?P<stack>[A-Za-z0-9_+#\- ]+):\s*(?P<points>(?:- .+\n?)+)
+### Core Application Structure
+This is a **single-user resume customization tool** built with Streamlit, focused on simplicity and performance:
+
+**Features**: Resume processing, email automation, bulk operations, parallel processing
+
+### Key Architectural Components
+
+#### 1. **Resume Processing Engine**
+- **Core Functions**: `find_projects_and_responsibilities()`, `add_points_to_responsibilities()`, `distribute_points()`
+- **Purpose**: Intelligent parsing of resume structure and enhancement with tech stack points
+- **Features**: Format preservation, bullet point detection, project identification
+- **Strategy**: Focus on top 3 projects for maximum impact
+
+#### 2. **Email Automation System**
+- **Core Classes**: `SMTPConnectionPool`
+- **Purpose**: Reliable email sending with SMTP connection pooling
+- **Features**: Connection reuse, batch processing, multiple provider support
+- **Providers**: Gmail, Office365, Yahoo with app-specific password support
+
+#### 3. **Parallel Processing Framework**
+- **Core Functions**: `process_resumes_bulk()`, `process_single_resume()`, `send_emails_batch()`
+- **Purpose**: High-performance batch processing for multiple resumes
+- **Features**: ThreadPoolExecutor-based parallelism, progress tracking, error handling
+- **Performance**: Up to 8x faster than sequential processing
+
+### Data Flow Architecture
+
 ```
-This expects input format:
-```
-TechStack1:
-- Point 1
-- Point 2
-TechStack2:
-- Point 3
-- Point 4
+File Upload → Tech Stack Input → Resume Processing → Email Sending (Optional) → Download
+     ↓              ↓                    ↓                    ↓                  ↓
+DOCX Files → Bullet Points → Format Preservation → SMTP Pool → Customized Resume
 ```
 
-### Document Modification Strategy
-- **Requirement**: All resume files MUST contain a "Projects" heading (case-insensitive)
-- **Insertion Point**: Content is inserted immediately after the "Projects" heading
-- **Grouping**: Bullet points are grouped into blocks of 6 and inserted as separate paragraphs
+### Processing Pipeline
+1. **File Upload**: Multiple DOCX files supported
+2. **Tech Stack Parsing**: Extract bullet points from formatted input
+3. **Project Detection**: Identify project sections and responsibilities
+4. **Point Distribution**: Distribute points across top 3 projects
+5. **Format Preservation**: Maintain original document formatting
+6. **Email Automation**: Optional bulk email sending with connection pooling
+7. **Download**: Individual and bulk download options
 
-### Email Configuration
-- **SMTP Server**: Hardcoded to Gmail (`smtp.gmail.com:465`)
-- **Security**: Uses SSL connection
-- **Authentication**: Requires sender email and password (app-specific password recommended)
+### State Management Strategy
+- **Streamlit Session State**: File uploads, tech stack inputs, processing results
+- **Memory Management**: Cleanup after bulk operations with `cleanup_memory()`
+- **Connection Pooling**: SMTP connection reuse for email efficiency
 
-## Common Issues and Solutions
+## 🔄 Development Workflow
 
-### Resume Processing Failures
-- **Missing "Projects" section**: Application will show error and skip the file
-- **Document corruption**: Ensure .docx files are valid Word documents
+### Feature Development
+1. **Resume parsing** - Understand the document structure parsing logic
+2. **Format preservation** - Key to maintaining document integrity
+3. **Bulk operations** - Leverage parallel processing for performance
+4. **Email integration** - Connection pooling prevents SMTP timeouts
 
-### Email Delivery Issues
-- **Gmail authentication**: Users need app-specific passwords for Gmail accounts
-- **SMTP restrictions**: Currently only supports Gmail; other providers require code changes
+### Testing Strategy
+- **Basic Testing**: `test_streamlit_app.py` for UI component testing
+- **Integration Testing**: Full app testing locally
+- **Manual Testing**: Use the built-in preview and email functions
 
-### Text Parsing Problems
-- **Format sensitivity**: Input must exactly match expected format with colons and hyphens
-- **Character encoding**: Application handles standard text characters
+### Deployment Considerations
+- **File Storage**: Temporary files handled in memory
+- **Memory Usage**: Built-in cleanup functions for bulk operations
+- **Local Setup**: Simple pip install and streamlit run
 
-## File Structure Notes
+## 🔧 Configuration & Customization
 
-This is a minimal single-file application with:
-- No requirements.txt (dependencies must be installed manually)
-- No configuration files
-- No test files
-- Git repository present but minimal commit history
-- Single Python file contains all logic
+### Streamlit Configuration (`.streamlit/config.toml`)
+- **Upload limits**: 200MB max file size
+- **Performance settings**: Compression, CORS enabled
+- **Theme**: Professional color scheme
 
-## Security Considerations
+### Key Configuration Points
+- **Max Workers**: Configurable parallel processing (2-8 workers)
+- **SMTP Servers**: Pre-configured for Gmail, Office365, Yahoo
+- **Tech Stack Format**: Specific bullet point format required
 
-- Email passwords are handled in Streamlit text inputs (not permanently stored)
-- No input validation on email addresses
-- Document processing happens in memory (no temporary file storage)
-- Base64 encoding used for secure file downloads
+## 🚨 Common Development Pitfalls
+
+### File Processing Issues
+- **Issue**: Document format not recognized
+- **Solution**: Ensure resumes have clear "Responsibilities:" sections in projects
+- **Testing**: Use the preview function to verify parsing
+
+### SMTP Connection Problems
+- **Issue**: Email sending failures
+- **Solution**: Use app-specific passwords, not regular passwords
+- **Debugging**: Check SMTP server settings and port numbers
+
+### Memory Management
+- **Issue**: High memory usage with large batches
+- **Solution**: `cleanup_memory()` function cleans up after bulk operations
+- **Pattern**: Called automatically after bulk processing
+
+### Streamlit Button Keys
+- **Issue**: Duplicate button key errors
+- **Solution**: Use file-specific keys like `f"preview_{file.name}"`
+- **Pattern**: Always include unique identifiers in button keys
+
+## 📊 Performance Optimizations
+
+### Current Optimizations
+- **Parallel Processing**: ThreadPoolExecutor for bulk resume processing
+- **SMTP Connection Pooling**: Reuse connections for batch email sending
+- **Memory Cleanup**: Automatic garbage collection after operations
+- **File Handling**: Optimized BytesIO handling for concurrent processing
+
+### Performance Monitoring
+The app includes built-in performance tracking:
+- Processing speed (resumes/second)
+- Total processing time
+- Email sending statistics
+- Speed comparison vs sequential processing
+
+### Scaling Considerations
+- **File Size**: Handles large DOCX files efficiently
+- **Batch Size**: Configurable worker count (2-8 workers optimal)
+- **Memory**: Automatic cleanup prevents memory leaks
+- **Concurrent Users**: Single-user design, but efficient resource usage
+
+## 🔐 Security Implementation
+
+### Input Security
+- **File Validation**: DOCX format verification
+- **Size Limits**: 200MB per file maximum
+- **Content Sanitization**: Safe document processing
+
+### Email Security  
+- **Credential Handling**: Never store email passwords
+- **App Passwords**: Recommend app-specific passwords
+- **Connection Security**: SSL/TLS encrypted SMTP connections
+
+### File Security
+- **Temporary Files**: Automatic cleanup after processing
+- **Path Safety**: Proper file path handling
+- **Data Privacy**: No persistent storage of personal data
+
+## 💡 Key Development Tips
+
+### Working with DOCX Processing
+- Documents must have clear project sections
+- "Responsibilities:" headings are detection keywords
+- Format preservation is critical - test with various document styles
+
+### Optimizing Bulk Operations
+- Use 3+ files to enable bulk mode
+- Monitor memory usage during development
+- Test with realistic file sizes and quantities
+
+### Email Integration Best Practices
+- Always test with app-specific passwords
+- Handle SMTP errors gracefully
+- Provide clear user feedback on email status
+
+This simplified architecture focuses on core resume processing functionality while maintaining high performance through parallel processing and efficient resource management.

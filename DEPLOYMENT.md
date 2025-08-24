@@ -44,56 +44,7 @@ Your app will be available at: `https://yourusername-resume-customizer-app-xxxxx
 
 ---
 
-### 2. 🐳 Docker Deployment (Recommended for Production)
-
-**Pros**: Consistent environment, scalable, works anywhere
-**Cons**: Requires Docker knowledge
-
-#### Local Docker Setup:
-
-1. **Install Docker** from [docker.com](https://www.docker.com/get-started)
-
-2. **Build and run**:
-   ```bash
-   # Build the image
-   docker build -t resume-customizer .
-   
-   # Run the container
-   docker run -p 8501:8501 resume-customizer
-   ```
-
-3. **Using Docker Compose** (easier):
-   ```bash
-   docker-compose up -d
-   ```
-
-#### Access: 
-Visit `http://localhost:8501`
-
-#### Production Docker Deployment:
-
-**Option A: Docker Hub + VPS**
-1. Push to Docker Hub:
-   ```bash
-   docker tag resume-customizer yourusername/resume-customizer
-   docker push yourusername/resume-customizer
-   ```
-
-2. Deploy on VPS:
-   ```bash
-   docker pull yourusername/resume-customizer
-   docker run -d -p 80:8501 --name resume-app yourusername/resume-customizer
-   ```
-
-**Option B: Cloud Container Services**
-- **AWS ECS/Fargate**
-- **Google Cloud Run**
-- **Azure Container Instances**
-- **DigitalOcean App Platform**
-
----
-
-### 3. ☁️ Heroku (Simple PaaS)
+### 2. ☁️ Heroku (Simple PaaS)
 
 **Pros**: Easy deployment, good for small apps
 **Cons**: Requires credit card, limited free tier
@@ -120,7 +71,7 @@ Visit `http://localhost:8501`
 
 ---
 
-### 4. 🔥 Railway (Modern Alternative to Heroku)
+### 3. 🔥 Railway (Modern Alternative to Heroku)
 
 **Pros**: Simple, modern, generous free tier
 **Cons**: Newer platform
@@ -137,7 +88,7 @@ Visit `http://localhost:8501`
 
 ---
 
-### 5. 💻 Local Development Deployment
+### 4. 💻 Local Development Deployment
 
 #### Option A: Virtual Environment (Recommended)
 
@@ -171,7 +122,7 @@ streamlit run app.py
 
 ---
 
-### 6. 🌐 Self-Hosted on VPS
+### 5. 🌐 Self-Hosted on VPS
 
 **For Advanced Users**
 

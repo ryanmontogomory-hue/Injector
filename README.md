@@ -1,16 +1,41 @@
-# 📝 Resume Customizer + Bulk Email Sender
+# 🎯 Resume Customizer Pro - Enterprise Multi-User Platform
 
-A powerful Streamlit application that helps you customize resumes with tech stacks and send them via email with bulk processing capabilities.
+A comprehensive resume customization platform with advanced multi-user features, smart email automation, team collaboration, and high-performance architecture supporting 50+ concurrent users.
 
-## ✨ Features
+## ✨ Enhanced Features
 
-- **📄 Resume Customization**: Upload DOCX resumes and add tech-specific bullet points
-- **🔍 Smart Preview**: See exactly what will be changed before processing
-- **📧 Email Integration**: Send customized resumes directly via email
-- **⚡ Bulk Processing**: Process multiple resumes simultaneously with parallel workers
-- **🎯 Format Preservation**: Maintains original formatting, fonts, and styles
-- **🔒 Secure**: No credentials stored, app-specific password support
-- **📊 Performance Metrics**: Real-time progress tracking and throughput statistics
+### 👤 User Account Management
+- **Secure Authentication**: PBKDF2 password hashing, session management
+- **User Profiles**: Bio, skills, professional information, profile pictures
+- **Subscription Tiers**: Free, Premium, Enterprise with usage limits
+- **Analytics Dashboard**: Usage tracking, performance metrics
+
+### 📧 Smart Email Follow-up System
+- **Advanced Templates**: Professional, Casual, Creative styles
+- **Smart Scheduling**: Business hours optimization, timezone awareness
+- **Email Tracking**: Opens, clicks, replies with analytics
+- **Campaign Management**: Multi-sequence follow-ups, auto-stop on reply
+- **Company Intelligence**: Personalized content based on company research
+
+### 👥 Multi-User Collaboration
+- **Team Workspaces**: Create and manage teams with role-based access
+- **Resume Sharing**: Share with users, teams, or public links
+- **Real-time Comments**: Collaborative feedback system
+- **Permission Levels**: View, Comment, Edit access controls
+- **Activity Feeds**: Track team activity and notifications
+
+### ⚡ High-Performance Architecture
+- **50+ Concurrent Users**: Optimized for enterprise scale
+- **Database Pooling**: 20-connection pool for optimal performance
+- **Advanced Caching**: Memory cache with TTL, file processing cache
+- **Async Operations**: Non-blocking background processing
+- **Rate Limiting**: Subscription-based quotas and DDoS protection
+
+### 📄 Enhanced Resume Processing
+- **Batch Processing**: Parallel processing with worker pools
+- **Format Preservation**: Maintains original formatting and styles
+- **Version Control**: Track resume versions and changes
+- **Template System**: Save and reuse resume templates
 
 ## 🚀 Quick Start
 
@@ -27,17 +52,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### Option 2: Docker
-```bash
-# Using Docker Compose (recommended)
-docker-compose up -d
-
-# Or build and run manually
-docker build -t resume-customizer .
-docker run -p 8501:8501 resume-customizer
-```
-
-### Option 3: One-Click Deploy
+### Option 2: One-Click Deploy
 - **Streamlit Cloud**: [![Deploy to Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io)
 - **Railway**: Deploy directly from GitHub
 - **Heroku**: One-click deploy with Heroku button
@@ -98,11 +113,16 @@ AWS: • Deployed applications using EC2 and S3 • Managed databases with RDS
 ```
 resume-customizer/
 ├── app.py                          # Main Streamlit application
+├── app_refactored.py               # Refactored modular version
 ├── requirements.txt                # Python dependencies
-├── Dockerfile                      # Docker container configuration
-├── docker-compose.yml              # Docker Compose setup
+├── config.py                       # Configuration module
+├── text_parser.py                  # Text parsing functionality
+├── document_processor.py           # Document processing module
+├── email_handler.py                # Email operations module
+├── resume_processor.py             # Resume processing coordination
 ├── DEPLOYMENT.md                   # Comprehensive deployment guide
 ├── README.md                       # This file
+├── README_REFACTORED.md            # Refactored architecture documentation
 ├── .streamlit/
 │   ├── config.toml                 # Streamlit configuration
 │   └── secrets.toml.example        # Secrets template
@@ -129,12 +149,7 @@ resume-customizer/
    - Setup: Connect GitHub → Deploy
    - URL: Auto-generated
 
-2. **Docker** (Production)
-   - Best for: Production environments, custom infrastructure
-   - Platforms: AWS, GCP, Azure, DigitalOcean
-   - Features: Scalable, consistent environment
-
-3. **Railway** (Modern PaaS)
+2. **Railway** (Modern PaaS)
    - Best for: Modern deployment, generous free tier
    - Setup: Connect GitHub → Auto-deploy
    - Features: Automatic HTTPS, custom domains

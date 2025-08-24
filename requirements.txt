@@ -1,6 +1,10 @@
 streamlit>=1.28.0
 python-docx>=0.8.11
-mammoth>=1.6.0
-python-decouple>=3.8
-gitpython>=3.1.40
-watchdog>=3.0.0
+python-multipart>=0.0.5
+
+# Optional enhanced preview
+mammoth>=1.5.0
+
+# Optional dependencies for enhanced features
+# psutil>=5.9.0  # For system monitoring
+# python-magic>=0.4.27  # For file type detection
