@@ -154,8 +154,7 @@ class BulletFormatter:
     
     def apply_bullet_formatting(self, paragraph, formatting: Dict[str, Any], text: str, fallback_formatting: Dict[str, Any] = None) -> None:
         """
-        Apply extracted formatting to a new bullet point paragraph with exact matching.
-        
+        Apply extracted formatting to a new bullet point paragraph with exact matching, including all paragraph spacing and indentation.
         Args:
             paragraph: Paragraph to format
             formatting: Formatting dictionary from get_bullet_formatting
@@ -173,8 +172,8 @@ class BulletFormatter:
                 except Exception:
                     pass
 
-            # Apply comprehensive paragraph formatting
-            pf_data = formatting.get('paragraph_format', {}) if formatting else {}
+            # Apply comprehensive paragraph formatting (spacing, indentation, alignment)
+            pf_data = formatting.get('paragraph_formatting', {}) if formatting else {}
             pf = paragraph.paragraph_format
             for attr, value in pf_data.items():
                 if value is not None:
@@ -185,22 +184,27 @@ class BulletFormatter:
 
             # Clear existing runs and add formatted text
             marker = formatting.get('bullet_marker', '-') if formatting else '-'
+            # Strip any leading bullet marker from the point text
+            clean_text = text.lstrip('-•* ').lstrip()
             paragraph.clear()
-            run = paragraph.add_run(f"{marker} {text}")
+            run = paragraph.add_run(f"{marker} {clean_text}")
 
             # Apply comprehensive run formatting
-            rf_data = formatting.get('run_format', {}) if formatting else {}
-            for attr, value in rf_data.items():
-                if value is not None:
-                    try:
-                        if attr == 'color' and value:
-                            run.font.color.rgb = value
-                        elif attr == 'highlight_color' and value:
-                            run.font.highlight_color = value
-                        else:
-                            setattr(run.font, attr, value)
-                    except Exception:
+            runs_formatting = formatting.get('runs_formatting', []) if formatting else []
+            if runs_formatting:
+                # Use the formatting from the first meaningful run
+                primary_format = runs_formatting[0]
+                for attr, value in primary_format.items():
+                    if attr == 'text':
                         continue
+                    if value is not None:
+                        try:
+                            if attr == 'color' and value:
+                                run.font.color.rgb = value
+                            else:
+                                setattr(run.font, attr, value)
+                        except Exception:
+                            continue
 
         except Exception as e:
             # Fallback: use fallback formatting if available
@@ -799,22 +803,24 @@ class DocumentProcessor:
         formatting = None
         fallback_formatting = None
         first_bullet_index = None
-        
+        marker_to_use = '-'
+
         # Search for the first existing bullet point in the responsibilities section
         for i in range(insertion_point, min(len(doc.paragraphs), project_info.get('responsibilities_end', len(doc.paragraphs)) + 1)):
             para_formatting = self.formatter.get_bullet_formatting(doc, i)
             if para_formatting:
                 formatting = para_formatting
                 first_bullet_index = i
+                marker_to_use = para_formatting.get('bullet_marker', '-')
                 break
-        
+
         # If no existing bullet point found, use the original insertion point
         if first_bullet_index is None:
             first_bullet_index = insertion_point
         else:
             # Insert after the first existing bullet point
             first_bullet_index += 1
-            
+
         points_added = 0
         current_insertion_point = first_bullet_index
         # Insert new points after the first existing point of the project
@@ -825,6 +831,9 @@ class DocumentProcessor:
                         new_para = doc.paragraphs[current_insertion_point].insert_paragraph_before()
                     else:
                         new_para = doc.add_paragraph()
+                    # Force the marker to match the first bullet
+                    if formatting:
+                        formatting['bullet_marker'] = marker_to_use
                     self.formatter.apply_bullet_formatting(new_para, formatting, point, fallback_formatting)
                     points_added += 1
                     current_insertion_point += 1
