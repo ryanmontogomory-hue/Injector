@@ -599,6 +599,129 @@ class BulkProcessor:
             for resume in failed_resumes:
                 st.error(f"📄 {resume['filename']}: {resume.get('error', 'Unknown error')}")
 
+    @performance_decorator("send_all_emails")
+    def send_all_resumes_via_email(self, uploaded_files):
+        """Send all resumes simultaneously via email without processing them again."""
+        # Rate limiting check
+        user_id = st.session_state.get('user_id', 'anonymous')
+        if rate_limiter.is_rate_limited(user_id, 'bulk_email', max_requests=3, time_window=300):
+            st.error("⚠️ Bulk email rate limit reached. Please wait before trying again.")
+            return
+        
+        logger.log_user_action("send_all_emails", files_count=len(uploaded_files))
+        
+        st.markdown("---")
+        st.markdown(f"### 📧 Sending All {len(uploaded_files)} Resumes via Email...")
+        
+        # Collect all resume data for email sending
+        email_tasks = []
+        missing_config_files = []
+        
+        for file in uploaded_files:
+            if file.name in st.session_state.resume_inputs:
+                data = st.session_state.resume_inputs[file.name]
+                
+                # Validate email configuration
+                email_data = {
+                    'recipient': data.get('recipient_email', '').strip(),
+                    'sender': data.get('sender_email', '').strip(),
+                    'password': data.get('sender_password', '').strip(),
+                    'smtp_server': data.get('smtp_server', ''),
+                    'smtp_port': data.get('smtp_port', 465),
+                    'subject': data.get('email_subject', '').strip(),
+                    'body': data.get('email_body', '').strip()
+                }
+                
+                validation_result = self.resume_manager.validate_email_config(email_data)
+                
+                if validation_result['valid'] and data.get('text', '').strip():
+                    # Process the resume first to get the buffer
+                    file_data = {
+                        'filename': file.name,
+                        'file': file,
+                        'text': data['text'],
+                        'recipient_email': data['recipient_email'],
+                        'sender_email': data['sender_email'],
+                        'sender_password': data['sender_password'],
+                        'smtp_server': data['smtp_server'],
+                        'smtp_port': data['smtp_port'],
+                        'email_subject': data['email_subject'],
+                        'email_body': data['email_body']
+                    }
+                    
+                    # Process resume to get the modified document
+                    result = self.resume_manager.process_single_resume(file_data)
+                    
+                    if result['success']:
+                        email_tasks.append({
+                            'filename': file.name,
+                            'buffer': result['buffer'],
+                            'email_data': email_data
+                        })
+                    else:
+                        st.error(f"❌ Failed to process {file.name}: {result['error']}")
+                else:
+                    missing_fields = validation_result.get('missing_fields', [])
+                    if not data.get('text', '').strip():
+                        missing_fields.append('Tech Stack Data')
+                    missing_config_files.append({
+                        'filename': file.name,
+                        'missing_fields': missing_fields
+                    })
+            else:
+                missing_config_files.append({
+                    'filename': file.name,
+                    'missing_fields': ['All email configuration and tech stack data']
+                })
+        
+        # Display missing configurations
+        if missing_config_files:
+            st.warning("⚠️ Some files are missing email configuration or tech stack data:")
+            for file_info in missing_config_files:
+                st.error(f"📄 {file_info['filename']}: Missing {', '.join(file_info['missing_fields'])}")
+        
+        # Send emails if we have valid tasks
+        if email_tasks:
+            st.success(f"✅ Ready to send {len(email_tasks)} resumes via email")
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            with st.spinner(f"Sending {len(email_tasks)} emails..."):
+                def progress_callback(message):
+                    status_text.text(message)
+                
+                email_results = self.resume_manager.send_batch_emails(email_tasks, progress_callback)
+            
+            progress_bar.progress(1.0)
+            status_text.text("✅ Email sending completed!")
+            
+            # Display results
+            successful_emails = [r for r in email_results if r.get('success')]
+            failed_emails = [r for r in email_results if not r.get('success')]
+            
+            st.markdown("### 📊 Email Sending Results")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("✅ Successfully Sent", len(successful_emails))
+            with col2:
+                st.metric("❌ Failed to Send", len(failed_emails))
+            
+            if successful_emails:
+                st.markdown("#### ✅ Successfully Sent Emails:")
+                for result in successful_emails:
+                    st.success(f"📧 {result['filename']} → {result['recipient']}")
+            
+            if failed_emails:
+                st.markdown("#### ❌ Failed to Send:")
+                for result in failed_emails:
+                    st.error(f"📧 {result['filename']}: {result.get('error', 'Unknown error')}")
+            
+            st.success(f"🎉 Bulk email operation completed! {len(successful_emails)}/{len(email_tasks)} emails sent successfully.")
+        else:
+            st.error("❌ No resumes are ready for email sending. Please configure email settings and add tech stack data for at least one resume.")
+
 
 def main():
     """Main application function."""
@@ -645,6 +768,22 @@ def main():
         # Bulk operations section
         st.markdown("---")
         st.markdown("## 🚀 Bulk Operations (High Performance Mode)")
+        
+        # Add the "Send All Resumes via Email" button for any number of files
+        st.markdown("### 📧 Quick Email All Resumes")
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.info("📨 Send all configured resumes via email simultaneously (processes and emails in one click)")
+        
+        with col2:
+            if st.button(
+                f"📧 SEND ALL {len(uploaded_files)} RESUMES VIA EMAIL",
+                type="secondary",
+                help="Process and send all resumes with email configuration via email simultaneously",
+                key="send_all_emails_btn"
+            ):
+                bulk_processor.send_all_resumes_via_email(uploaded_files)
         
         if len(uploaded_files) >= config["bulk_mode_threshold"]:
             st.markdown("### ⚡ Fast Bulk Processing for Multiple Resumes")
