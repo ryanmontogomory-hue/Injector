@@ -466,9 +466,10 @@ class ProjectDetector:
     def find_projects_and_responsibilities(self, doc: Document) -> List[Tuple[str, int, int]]:
         """
         Find all projects and their Responsibilities sections in the resume.
-        Format: Company | Date
-                Project title
-                Responsibilities:
+        Supports multiple formats:
+        1. Company | Date format with explicit Responsibilities section
+        2. Company | Date format with bullet points directly under role
+        3. Role titles with bullet points
         
         Args:
             doc: Document to search
@@ -481,6 +482,7 @@ class ProjectDetector:
         project_title_line = None
         in_responsibilities = False
         responsibilities_start = -1
+        found_bullet_points = False
         
 
         def is_responsibilities_heading(text):
@@ -489,29 +491,97 @@ class ProjectDetector:
             norm = re.sub(r'[^a-z ]', '', text.lower())
             norm = re.sub(r'\s+', ' ', norm).strip()
             keywords = [
-                'responsibilities', 'key responsibilities', 'duties', 'tasks'
+                'responsibilities', 'key responsibilities', 'duties', 'tasks', 'role', 'position'
             ]
             return any(norm.startswith(k) for k in keywords)
+
+        def is_bullet_point(text):
+            """Check if text looks like a bullet point."""
+            import re
+            text = text.strip()
+            # Check for common bullet markers
+            bullet_markers = ['•', '-', '*', '◦', '▪', '▫', '‣']
+            if any(text.startswith(marker) for marker in bullet_markers):
+                return True
+            # Check for numbered lists
+            if re.match(r'^\d+\.', text):
+                return True
+            return False
+
+        def is_introductory_paragraph(text):
+            """Check if text looks like an introductory paragraph (not a bullet point or heading)."""
+            import re
+            text = text.strip()
+            # Skip if it's a bullet point
+            if is_bullet_point(text):
+                return False
+            # Skip if it's a heading (all caps or has specific patterns)
+            if text.isupper() or re.match(r'^[A-Z\s]+$', text):
+                return False
+            # Skip if it's very short (likely a title)
+            if len(text.split()) < 5:
+                return False
+            # Skip if it contains typical heading patterns
+            if any(keyword in text.lower() for keyword in ['responsibilities', 'duties', 'role', 'position']):
+                return False
+            # If it's a longer paragraph, it's likely introductory
+            return len(text.split()) >= 10
+
+        def is_project_header(text):
+            """Check if text looks like a project/role header."""
+            import re
+            text = text.strip()
+            
+            # Skip if it's a bullet point
+            if is_bullet_point(text):
+                return False
+                
+            # Skip if it's very short (likely just a name)
+            if len(text.split()) < 2:
+                return False
+                
+            # Check for company | date format (Kumar S. style)
+            if '|' in text and self._looks_like_company_date(text):
+                return True
+                
+            # Check for "Client - Company - Date" format (Viswanadha Raju style)
+            if ' - ' in text and re.search(r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b', text.lower()):
+                return True
+                
+            # Check for "Role at Company (Location)" format (M. Youssef style)
+            if ' at ' in text and '(' in text and ')' in text:
+                return True
+                
+            # Check for role titles with company names
+            role_keywords = ['developer', 'engineer', 'manager', 'lead', 'senior', 'software', 'full stack', 'frontend', 'backend']
+            if any(keyword in text.lower() for keyword in role_keywords):
+                return True
+                
+            return False
 
         for i, para in enumerate(doc.paragraphs):
             text = para.text.strip()
 
-            # Look for company | date format (first line of project)
-            if '|' in text and self._looks_like_company_date(text):
+            # Look for project headers (multiple formats)
+            if is_project_header(text):
                 # Save previous project if exists
-                if current_project and responsibilities_start != -1:
+                if current_project and (responsibilities_start != -1 or found_bullet_points):
+                    if responsibilities_start == -1:
+                        # If no explicit responsibilities section, use bullet points
+                        responsibilities_start = i + 1
                     responsibilities_end = self._find_responsibilities_end(doc, i, responsibilities_start)
                     projects.append((current_project, responsibilities_start, responsibilities_end))
-                # Start new project - use company|date as project identifier
+                # Start new project
                 current_project = text
                 project_title_line = None
                 in_responsibilities = False
                 responsibilities_start = -1
+                found_bullet_points = False
 
-            # If we just found a company|date line, next non-empty line should be project title
-            elif current_project and project_title_line is None and text and not is_responsibilities_heading(text):
+            # If we just found a project header, next non-empty line could be a job title (for Kumar S. format)
+            elif current_project and project_title_line is None and text and not is_responsibilities_heading(text) and not is_bullet_point(text) and not is_introductory_paragraph(text):
                 project_title_line = text
-                # Combine company|date with project title for full project name
+                # Combine project header with job title for full project name
                 current_project = f"{current_project} - {project_title_line}"
 
             # Look for Responsibilities section (robust match)
@@ -519,27 +589,49 @@ class ProjectDetector:
                 in_responsibilities = True
                 responsibilities_start = i + 1  # Start after the Responsibilities heading
 
+            # Check for introductory paragraph (skip it, bullet points will follow)
+            elif current_project and text and is_introductory_paragraph(text):
+                # Skip introductory paragraph, continue looking for bullet points
+                continue
+
+            # Check for bullet points under current project
+            elif current_project and text and is_bullet_point(text):
+                found_bullet_points = True
+                if responsibilities_start == -1:
+                    # Start responsibilities section at first bullet point
+                    responsibilities_start = i
+
             # If we're in responsibilities and find the end (next section or next project)
-            elif in_responsibilities and text and (self._is_section_end(text) or ('|' in text and self._looks_like_company_date(text))):
+            elif (in_responsibilities or found_bullet_points) and text and (self._is_section_end(text) or is_project_header(text)):
                 if current_project and responsibilities_start != -1:
                     responsibilities_end = i - 1
                     projects.append((current_project, responsibilities_start, responsibilities_end))
                 in_responsibilities = False
                 responsibilities_start = -1
+                found_bullet_points = False
 
         # Add the last project if found
         if current_project:
-            if responsibilities_start != -1:
+            if responsibilities_start != -1 or found_bullet_points:
+                if responsibilities_start == -1:
+                    # If no explicit responsibilities section, use bullet points
+                    responsibilities_start = len(doc.paragraphs) - 1
                 responsibilities_end = len(doc.paragraphs) - 1
                 projects.append((current_project, responsibilities_start, responsibilities_end))
             else:
-                print(f"⚠️ Warning: No Responsibilities section found for project: {current_project}")
+                logger.warning(f"No Responsibilities section or bullet points found for project: {current_project}")
 
-        # Debug print to diagnose project tuples before filtering
-        print(f"[DEBUG] Raw projects before filter: {projects}")
         # Defensive filter: remove any projects with responsibilities_start == -1
         projects = [p for p in projects if p[1] != -1]
-        print(f"[DEBUG] Filtered projects: {projects}")
+        
+        # Debug logging
+        if not projects:
+            logger.warning("No projects found. Document structure analysis:")
+            for i, para in enumerate(doc.paragraphs[:20]):  # Log first 20 paragraphs
+                text = para.text.strip()
+                if text:
+                    logger.warning(f"Para {i}: '{text[:50]}...' (len: {len(text)})")
+        
         return projects
     def find_projects(self, doc: Document) -> List[Dict[str, Any]]:
         """Find projects in the document and return structured information."""
@@ -793,9 +885,10 @@ class DocumentProcessor:
         self.point_distributor = PointDistributor()
     
     def add_points_to_project(self, doc: Document, project_info: Dict) -> int:
-        # Debug print to catch missing insertion_point
+        # Validate project_info structure
         if 'insertion_point' not in project_info:
-            print(f"DEBUG ERROR: project_info missing 'insertion_point': {project_info}")
+            logger.error(f"project_info missing 'insertion_point': {project_info}")
+            return 0
         # Find the first existing bullet point in Responsibilities section
         insertion_point = project_info['insertion_point']
         mixed_tech_stacks = project_info['mixed_tech_stacks']
@@ -975,3 +1068,41 @@ def get_document_processor() -> DocumentProcessor:
         DocumentProcessor instance
     """
     return DocumentProcessor()
+
+
+def cleanup_document_resources() -> None:
+    """Clean up document processing resources."""
+    try:
+        # Force garbage collection
+        gc.collect()
+        
+        # Clear any cached document objects
+        FileProcessor.cleanup_memory()
+        
+        # Additional memory cleanup
+        import sys
+        if hasattr(sys, 'getallocatedblocks'):
+            logger.info(f"Memory cleanup completed. Allocated blocks: {sys.getallocatedblocks()}")
+        
+    except Exception as e:
+        # Log but don't fail
+        logger.warning(f"Document cleanup failed: {e}")
+
+def force_memory_cleanup() -> None:
+    """Force aggressive memory cleanup when usage is high."""
+    try:
+        import gc
+        import sys
+        
+        # Multiple garbage collection passes
+        for _ in range(3):
+            gc.collect()
+        
+        # Clear any cached objects
+        if hasattr(FileProcessor, 'cleanup_memory'):
+            FileProcessor.cleanup_memory()
+        
+        logger.info("Aggressive memory cleanup completed")
+        
+    except Exception as e:
+        logger.error(f"Error during aggressive memory cleanup: {e}")

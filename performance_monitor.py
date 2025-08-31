@@ -216,7 +216,7 @@ class PerformanceMonitor:
         self.monitor_thread = None
         self._stop_event = threading.Event()
     
-    def start_monitoring(self, interval: float = 30.0):
+    def start_monitoring(self, interval: float = 60.0):  # Increased interval to reduce overhead
         """Start background system monitoring."""
         if self.monitoring_active:
             return
@@ -226,12 +226,23 @@ class PerformanceMonitor:
         
         def monitor_loop():
             while not self._stop_event.wait(interval):
-                self.collector.record_system_metrics()
+                try:
+                    # Only monitor if memory usage is reasonable
+                    if PSUTIL_AVAILABLE:
+                        memory = psutil.virtual_memory()
+                        if memory.percent < 95:  # Skip monitoring if memory is critically high
+                            self.collector.record_system_metrics()
+                        else:
+                            logger.warning("Skipping system metrics collection due to high memory usage")
+                    else:
+                        self.collector.record_system_metrics()
+                except Exception as e:
+                    logger.error(f"Error in monitoring loop: {e}")
         
         self.monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
         self.monitor_thread.start()
         
-        logger.info("Performance monitoring started")
+        logger.info("Performance monitoring started with memory-aware collection")
     
     def stop_monitoring(self):
         """Stop background monitoring."""
@@ -420,5 +431,10 @@ def cleanup_performance_monitor():
     """Cleanup performance monitor resources."""
     global _performance_monitor
     if _performance_monitor:
-        _performance_monitor.stop_monitoring()
-        _performance_monitor = None
+        try:
+            _performance_monitor.stop_monitoring()
+            logger.info("Performance monitor stopped")
+        except Exception as e:
+            logger.error(f"Error stopping performance monitor: {e}")
+        finally:
+            _performance_monitor = None

@@ -1,3 +1,4 @@
+import streamlit as st
 """
 Email handling module for Resume Customizer application.
 Handles SMTP connections, email sending, and connection pooling.
@@ -46,7 +47,12 @@ class SMTPConnectionPool:
         with self._lock:
             if connection_key not in self._connections:
                 try:
-                    smtp = smtplib.SMTP_SSL(smtp_server, smtp_port)
+                    # Support both SSL (port 465) and TLS (port 587)
+                    if smtp_port == 465:
+                        smtp = smtplib.SMTP_SSL(smtp_server, smtp_port)
+                    else:
+                        smtp = smtplib.SMTP(smtp_server, smtp_port)
+                        smtp.starttls()
                     smtp.login(sender_email, sender_password)
                     self._connections[connection_key] = smtp
                 except Exception as e:
@@ -447,6 +453,7 @@ class EmailManager:
 email_manager = EmailManager()
 
 
+@st.cache_resource
 def get_email_manager() -> EmailManager:
     """
     Get the global email manager instance.

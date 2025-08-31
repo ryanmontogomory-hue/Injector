@@ -2,9 +2,12 @@ streamlit>=1.28.0
 python-docx>=0.8.11
 python-multipart>=0.0.5
 
-# Optional enhanced preview
+# Enhanced preview and processing
 mammoth>=1.5.0
 
-# Optional dependencies for enhanced features
-# psutil>=5.9.0  # For system monitoring
-# python-magic>=0.4.27  # For file type detection
+# Enhanced features (recommended for production)
+psutil>=5.9.0  # For system monitoring
+python-magic>=0.4.27  # For file type detection
+
+# Additional security and performance
+cryptography>=3.4.8  # For enhanced security

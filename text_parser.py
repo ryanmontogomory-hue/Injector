@@ -248,12 +248,16 @@ def parse_input_text(text: str, manual_text: str = "") -> Tuple[List[str], List[
     Returns:
         Tuple of (selected_points, tech_stacks_used)
     """
-    parser = TechStackParser()
-    selected_points, tech_stacks_used = parser.parse_tech_stacks(text)
-    
-    # Override with manual points if provided
-    if manual_text.strip():
-        manual_parser = ManualPointsParser()
-        selected_points = manual_parser.parse_manual_points(manual_text)
-    
-    return selected_points, tech_stacks_used
+    try:
+        parser = TechStackParser()
+        selected_points, tech_stacks_used = parser.parse_tech_stacks(text)
+        
+        # Override with manual points if provided
+        if manual_text.strip():
+            manual_parser = ManualPointsParser()
+            selected_points = manual_parser.parse_manual_points(manual_text)
+        
+        return selected_points, tech_stacks_used
+    except Exception as e:
+        # Return empty results on parsing error
+        return [], []

@@ -7,6 +7,7 @@ import concurrent.futures
 from typing import List, Dict, Any, Optional, Callable
 from io import BytesIO
 from docx import Document
+import streamlit as st
 
 from text_parser import parse_input_text, get_parser
 from document_processor import get_document_processor, FileProcessor
@@ -71,7 +72,11 @@ class ResumeProcessor:
             
             # Convert to structured format
             projects = []
-            for i, (title, start_idx, end_idx) in enumerate(projects_data):
+            for i, project_tuple in enumerate(projects_data):
+                if len(project_tuple) != 3:
+                    logger.error(f"Malformed project tuple at index {i}: {project_tuple}")
+                    continue
+                title, start_idx, end_idx = project_tuple
                 projects.append({
                     'title': title,
                     'index': i,
@@ -313,7 +318,7 @@ class PreviewGenerator:
                         'responsibilities_end': end_idx
                     })
                 else:
-                    print(f"DEBUG: Malformed project tuple at index {i}: {project_tuple}")
+                    logger.error(f"Malformed project tuple at index {i}: {project_tuple}")
                     continue
             
             # Apply changes to preview using round-robin logic
@@ -470,6 +475,7 @@ class ResumeManager:
 resume_manager = ResumeManager()
 
 
+@st.cache_resource
 def get_resume_manager() -> ResumeManager:
     """
     Get the global resume manager instance.

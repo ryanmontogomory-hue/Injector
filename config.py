@@ -1,3 +1,4 @@
+import streamlit as st
 """
 Configuration module for Resume Customizer application.
 Contains all constants, default values, and configuration settings.
@@ -14,6 +15,9 @@ APP_CONFIG = {
     "max_workers_default": 4,
     "max_workers_limit": 8,
     "bulk_mode_threshold": 3,
+    "version": "2.1.0",
+    "build_date": "2024-01-15",
+    "author": "Resume Customizer Team",
 }
 
 # SMTP Configuration
@@ -138,35 +142,78 @@ PERFORMANCE_CONFIG = {
 
 # Error Messages
 ERROR_MESSAGES = {
-    "no_tech_stacks": "Could not parse tech stacks for {filename}",
-    "no_projects": "No projects found in {filename}",
-    "parsing_failed": "Could not parse tech stacks from input for {filename}. Please use the format 'TechName: • point1 • point2'",
-    "no_responsibilities": "Could not find projects with Responsibilities sections in {filename}",
-    "custom_smtp_not_supported": "Custom SMTP server not supported in bulk mode",
-    "smtp_connection_failed": "Failed to create SMTP connection: {error}",
-    "email_send_failed": "Failed to send email for {filename}: {error}",
+    "no_tech_stacks": "Could not parse tech stacks for {filename}. Please check your input format.",
+    "no_projects": "No projects found in {filename}. Ensure your resume has project sections.",
+    "parsing_failed": "Could not parse tech stacks from input for {filename}. Please use the format 'TechName: • point1 • point2' or the new block format.",
+    "no_responsibilities": "Could not find projects with Responsibilities sections or bullet points in {filename}. Please ensure your resume has work experience sections with bullet points describing your responsibilities.",
+    "custom_smtp_not_supported": "Custom SMTP server not supported in bulk mode. Please use Gmail, Office365, or Yahoo.",
+    "smtp_connection_failed": "Failed to create SMTP connection: {error}. Please check your email credentials and network connection.",
+    "email_send_failed": "Failed to send email for {filename}: {error}. Please verify your email settings.",
+    "file_validation_failed": "File validation failed: {error}. Please check file format and size.",
+    "memory_error": "Memory error during processing. Please try with fewer files or restart the application.",
+    "processing_timeout": "Processing timeout. Please try again or reduce the number of files.",
 }
 
 # Success Messages
 SUCCESS_MESSAGES = {
-    "preview_generated": "Preview generated with {points_added} points added!",
-    "email_sent": "Email sent successfully for {filename} to {recipient}",
-    "processing_complete": "{filename} has been processed successfully!",
-    "bulk_complete": "Bulk processing completed!",
+    "preview_generated": "✅ Preview generated with {points_added} points added!",
+    "email_sent": "📧 Email sent successfully for {filename} to {recipient}",
+    "processing_complete": "✅ {filename} has been processed successfully!",
+    "bulk_complete": "🚀 Bulk processing completed successfully!",
+    "file_uploaded": "📁 {filename} uploaded successfully ({size_mb:.1f}MB)",
+    "validation_passed": "✅ All files validated successfully",
+    "health_check_passed": "✅ Application health check passed",
+    "config_validated": "✅ Configuration validated successfully",
 }
 
+@st.cache_data
 def get_app_config() -> Dict[str, Any]:
-    """Get application configuration."""
+    """Get application configuration.
+    
+    Returns:
+        Dict[str, Any]: Application configuration dictionary
+    """
     return APP_CONFIG.copy()
 
+@st.cache_data
 def get_smtp_servers() -> List[str]:
-    """Get list of available SMTP servers."""
+    """Get list of available SMTP servers.
+    
+    Returns:
+        List[str]: List of available SMTP server options
+    """
     return SMTP_SERVER_OPTIONS.copy()
 
 def get_default_email_subject() -> str:
     """Get default email subject with current date."""
-    return DEFAULT_EMAIL_CONFIG["subject"]()
+    try:
+        return DEFAULT_EMAIL_CONFIG["subject"]()
+    except Exception:
+        return f"Customized Resume - {datetime.now().strftime('%Y-%m-%d')}"
 
 def get_default_email_body() -> str:
     """Get default email body."""
     return DEFAULT_EMAIL_CONFIG["body"]
+
+def validate_config() -> Dict[str, Any]:
+    """Validate configuration and return any issues."""
+    issues = []
+    
+    # Validate required configurations
+    required_configs = ['title', 'page_title', 'layout', 'max_workers_default', 'max_workers_limit', 'bulk_mode_threshold']
+    for config_key in required_configs:
+        if config_key not in APP_CONFIG:
+            issues.append(f"Missing required config: {config_key}")
+    
+    # Validate SMTP servers
+    if not SMTP_SERVER_OPTIONS:
+        issues.append("No SMTP servers configured")
+    
+    # Validate performance settings
+    if APP_CONFIG.get('max_workers_limit', 0) < APP_CONFIG.get('max_workers_default', 0):
+        issues.append("max_workers_limit should be >= max_workers_default")
+    
+    return {
+        'valid': len(issues) == 0,
+        'issues': issues
+    }

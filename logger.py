@@ -220,7 +220,8 @@ def display_logs_in_sidebar():
                 log_level = st.selectbox(
                     "Filter by Level",
                     ["All", "INFO", "WARNING", "ERROR"],
-                    index=0
+                    index=0,
+                    key="log_level_filter"
                 )
                 
                 # Get logs
