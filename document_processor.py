@@ -88,73 +88,233 @@ class BulletFormatter:
     def __init__(self):
         self.bullet_markers = DOC_CONFIG["bullet_markers"]
     
+    def _extract_list_format(self, paragraph) -> Dict[str, Any]:
+        """
+        Extract list formatting information from a paragraph.
+        
+        Args:
+            paragraph: The paragraph to extract list formatting from
+            
+        Returns:
+            Dictionary containing list formatting information
+        """
+        # Default values for non-list paragraphs
+        list_format = {
+            'ilvl': 0,  # Default to top level
+            'numId': 1,  # Default to first numbering ID
+            'style': 'List Bullet',
+            'indent': 0,
+            'is_list': False  # Flag to indicate if this is a real list item
+        }
+        
+        try:
+            # Get style name safely
+            if hasattr(paragraph, 'style') and paragraph.style is not None:
+                list_format['style'] = paragraph.style.name
+            
+            # Get indentation safely
+            if hasattr(paragraph, 'paragraph_format') and paragraph.paragraph_format is not None:
+                if hasattr(paragraph.paragraph_format, 'left'):
+                    list_format['indent'] = paragraph.paragraph_format.left or 0
+            
+            # Check if this is actually a bullet point
+            if not self._is_bullet_point(paragraph.text):
+                return list_format
+                
+            # If we get here, it's a bullet point
+            list_format['is_list'] = True
+            
+            # Try to get Word list formatting if available
+            if not hasattr(paragraph, '_element'):
+                return list_format
+                
+            if not hasattr(paragraph._element, 'pPr'):
+                return list_format
+                
+            pPr = paragraph._element.pPr
+            if pPr is None:
+                return list_format
+            
+            numPr = getattr(pPr, 'numPr', None)
+            if numPr is None:
+                return list_format
+            
+            # Get list level (ilvl)
+            if hasattr(numPr, 'ilvl'):
+                ilvl = numPr.ilvl
+                if hasattr(ilvl, 'val'):
+                    list_format['ilvl'] = ilvl.val
+            
+            # Get numbering ID (numId)
+            if hasattr(numPr, 'numId'):
+                numId = numPr.numId
+                if hasattr(numId, 'val'):
+                    list_format['numId'] = numId.val
+                        
+        except Exception as e:
+            # If anything fails, return the basic formatting we have
+            pass
+            
+        return list_format
+        
     def get_bullet_formatting(self, doc: Document, paragraph_index: int) -> Optional[Dict[str, Any]]:
         """Extract complete bullet formatting from a paragraph."""
-        if paragraph_index >= len(doc.paragraphs):
-            return None
-            
-        para = doc.paragraphs[paragraph_index]
-        if not self._is_bullet_point(para.text):
-            return None
-            
-        # Get comprehensive formatting from all runs
-        formatting_info = {
-            'runs_formatting': [],
-            'paragraph_formatting': {},
-            'style': para.style,
-            'bullet_marker': self._extract_bullet_marker(para.text)
-        }
-        
-        # Extract formatting from each run
-        for run in para.runs:
-            run_format = {
-                'text': run.text,
-                'font_name': run.font.name,
-                'font_size': run.font.size,
-                'bold': run.font.bold,
-                'italic': run.font.italic,
-                'underline': run.font.underline,
-                'color': run.font.color.rgb if run.font.color.rgb else None
+        try:
+            if paragraph_index >= len(doc.paragraphs):
+                return None
+                
+            para = doc.paragraphs[paragraph_index]
+            if not self._is_bullet_point(para.text):
+                return None
+                
+            # Get basic formatting
+            formatting_info = {
+                'runs_formatting': [],
+                'paragraph_formatting': {},
+                'style': para.style.name if para.style else 'Normal',
+                'bullet_marker': self._extract_bullet_marker(para.text) or '•',
+                'bullet_separator': self._detect_bullet_separator(para.text) or ' ',
+                'list_format': self._extract_list_format(para)
             }
-            formatting_info['runs_formatting'].append(run_format)
-        
-        # Extract paragraph-level formatting
-        pf = para.paragraph_format
-        formatting_info['paragraph_formatting'] = {
-            'alignment': pf.alignment,
-            'left_indent': pf.left_indent,
-            'right_indent': pf.right_indent,
-            'first_line_indent': pf.first_line_indent,
-            'space_before': pf.space_before,
-            'space_after': pf.space_after,
-            'line_spacing': pf.line_spacing
-        }
-        
-        return formatting_info
+            
+            # Extract formatting from each run
+            for run in para.runs:
+                try:
+                    run_format = {
+                        'text': run.text,
+                        'font_name': run.font.name if hasattr(run.font, 'name') else None,
+                        'font_size': run.font.size.pt if hasattr(run.font, 'size') and run.font.size else None,
+                        'bold': run.font.bold if hasattr(run.font, 'bold') else None,
+                        'italic': run.font.italic if hasattr(run.font, 'italic') else None,
+                        'underline': run.font.underline if hasattr(run.font, 'underline') else None,
+                        'color': run.font.color.rgb if hasattr(run.font, 'color') and run.font.color and hasattr(run.font.color, 'rgb') else None
+                    }
+                    formatting_info['runs_formatting'].append(run_format)
+                except Exception as e:
+                    # If we can't get run formatting, continue with what we have
+                    continue
+                    
+            # Get paragraph formatting
+            if hasattr(para, 'paragraph_format'):
+                p_format = para.paragraph_format
+                formatting_info['paragraph_formatting'] = {
+                    'alignment': p_format.alignment,
+                    'first_line_indent': p_format.first_line_indent,
+                    'left_indent': p_format.left_indent,
+                    'right_indent': p_format.right_indent,
+                    'space_before': p_format.space_before,
+                    'space_after': p_format.space_after,
+                    'line_spacing': p_format.line_spacing,
+                    'keep_together': p_format.keep_together,
+                    'keep_with_next': p_format.keep_with_next,
+                    'page_break_before': p_format.page_break_before,
+                    'widow_control': p_format.widow_control
+                }
+                
+            return formatting_info
+            
+        except Exception as e:
+            # If anything fails, return a basic formatting structure
+            return {
+                'runs_formatting': [{'text': para.text if 'para' in locals() else ''}],
+                'paragraph_formatting': {},
+                'style': 'Normal',
+                'bullet_marker': '•',
+                'bullet_separator': ' ',
+                'list_format': {
+                    'ilvl': 0,
+                    'numId': 1,
+                    'style': 'List Bullet',
+                    'indent': 0,
+                    'is_list': False
+                }
+            }
     
     def _is_bullet_point(self, text: str) -> bool:
         """Check if text starts with a bullet point marker."""
         text = text.strip()
+        # Enhanced detection for various bullet formats
+        all_markers = ['•', '●', '◦', '▪', '▫', '‣', '*', '-'] + self.bullet_markers
         return (
-            any(text.startswith(marker) for marker in self.bullet_markers) or
+            any(text.startswith(marker + ' ') or text.startswith(marker) for marker in all_markers) or
             (text and text[0].isdigit() and '.' in text[:3])
         )
     
     def _extract_bullet_marker(self, text: str) -> str:
-        """Extract the bullet marker from text."""
+        """Extract the bullet marker from text with enhanced detection."""
+        text_original = text  # Keep original for tab detection
         text = text.strip()
-        for marker in self.bullet_markers:
-            if text.startswith(marker):
+        # Prioritize bullet markers in order of preference
+        priority_markers = ['•', '●', '◦', '▪', '▫', '‣']
+        other_markers = ['*', '-'] + self.bullet_markers
+        
+        # Check priority markers first
+        for marker in priority_markers:
+            if text.startswith(marker + '\t') or text.startswith(marker + ' ') or (text.startswith(marker) and len(text) > 1):
                 return marker
+        
+        # Check other markers
+        for marker in other_markers:
+            if text.startswith(marker + '\t') or text.startswith(marker + ' ') or (text.startswith(marker) and len(text) > 1):
+                return marker
+                
+        # Check for numbered bullets
         if text and text[0].isdigit():
             for i, char in enumerate(text):
                 if char in '.)': 
                     return text[:i+1]
-        return '-'
+        
+        return '•'  # Default to standard bullet
+    
+    def _detect_bullet_separator(self, text: str) -> str:
+        """Detect whether bullet uses tab or space separator."""
+        text = text.strip()
+        # Check for common bullet markers
+        markers = ['•', '●', '◦', '▪', '▫', '‣', '*', '-']
+        
+        for marker in markers:
+            if text.startswith(marker + '\t'):
+                return '\t'  # Tab separator
+            elif text.startswith(marker + ' '):
+                return ' '   # Space separator
+        
+        return '\t'  # Default to tab for better formatting
+    
+    def _apply_list_formatting(self, paragraph, list_format: Dict[str, Any]) -> None:
+        """Apply Word list formatting to paragraph."""
+        try:
+            from docx.oxml.shared import qn
+            from docx.oxml import parse_xml
+            
+            numId = list_format.get('numId')
+            ilvl = list_format.get('ilvl', 0)
+            
+            if numId is not None:
+                # Create numbering properties XML
+                numPr_xml = f'''
+                <w:numPr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                    <w:ilvl w:val="{ilvl}"/>
+                    <w:numId w:val="{numId}"/>
+                </w:numPr>'''
+                
+                # Get or create paragraph properties
+                pPr = paragraph._element.get_or_add_pPr()
+                
+                # Remove existing numbering properties if any
+                existing_numPr = pPr.find(qn('w:numPr'))
+                if existing_numPr is not None:
+                    pPr.remove(existing_numPr)
+                
+                # Add new numbering properties
+                numPr = parse_xml(numPr_xml)
+                pPr.append(numPr)
+        except Exception:
+            pass
     
     def apply_bullet_formatting(self, paragraph, formatting: Dict[str, Any], text: str, fallback_formatting: Dict[str, Any] = None) -> None:
         """
         Apply extracted formatting to a new bullet point paragraph with exact matching, including all paragraph spacing and indentation.
+        
         Args:
             paragraph: Paragraph to format
             formatting: Formatting dictionary from get_bullet_formatting
@@ -182,12 +342,19 @@ class BulletFormatter:
                     except Exception:
                         continue
 
+            # Apply Word list formatting if available
+            list_format = formatting.get('list_format', {}) if formatting else {}
+            if list_format and list_format.get('numId') is not None:
+                try:
+                    # Apply list formatting using Word's numbering system
+                    self._apply_list_formatting(paragraph, list_format)
+                except Exception:
+                    pass
+            
             # Clear existing runs and add formatted text
-            marker = formatting.get('bullet_marker', '-') if formatting else '-'
-            # Strip any leading bullet marker from the point text
-            clean_text = text.lstrip('-•* ').lstrip()
+            clean_text = text.lstrip('-•*◦▪▫‣ \t').lstrip()
             paragraph.clear()
-            run = paragraph.add_run(f"{marker} {clean_text}")
+            run = paragraph.add_run(clean_text)
 
             # Apply comprehensive run formatting
             runs_formatting = formatting.get('runs_formatting', []) if formatting else []
@@ -209,8 +376,10 @@ class BulletFormatter:
         except Exception as e:
             # Fallback: use fallback formatting if available
             paragraph.clear()
-            marker = formatting.get('bullet_marker', '-') if formatting else '-'
-            paragraph.add_run(f"{marker} {text}")
+            marker = formatting.get('bullet_marker', '•') if formatting else '•'
+            separator = formatting.get('bullet_separator', '\t') if formatting else '\t'
+            clean_text = text.lstrip('-•*◦▪▫‣ \t').lstrip()
+            paragraph.add_run(f"{marker}{separator}{clean_text}")
 
 
 class BulletPointProcessor:
@@ -258,7 +427,9 @@ class BulletPointProcessor:
             'runs_formatting': [],
             'paragraph_formatting': {},
             'style': para.style,
-            'bullet_marker': self._extract_bullet_marker(para.text)
+            'bullet_marker': self._extract_bullet_marker(para.text),
+            'bullet_separator': self._detect_bullet_separator(para.text),
+            'list_format': self._extract_list_format(para)
         }
         
         # Extract formatting from each run
@@ -311,9 +482,10 @@ class BulletPointProcessor:
         """
         text = text.strip()
         
-        # Check for common bullet markers
-        for marker in self.bullet_markers:
-            if text.startswith(marker):
+        # Check for all common bullet markers, not just config ones
+        all_markers = ['•', '●', '◦', '▪', '▫', '‣', '*', '-'] + self.bullet_markers
+        for marker in all_markers:
+            if text.startswith(marker + '\t') or text.startswith(marker + ' ') or text.startswith(marker):
                 return marker
         
         # Check for numbered bullets (1., 2., etc.)
@@ -322,57 +494,90 @@ class BulletPointProcessor:
                 if char in '.)':
                     return text[:i+1]
         
-        # Default bullet marker
-        return '-'
+        # Default bullet marker - prefer bullet over dash
+        return '•'
+    
+    def _detect_bullet_separator(self, text: str) -> str:
+        """Detect whether bullet uses tab or space separator."""
+        text = text.strip()
+        # Check for common bullet markers
+        markers = ['•', '●', '◦', '▪', '▫', '‣', '*', '-']
+        
+        for marker in markers:
+            if text.startswith(marker + '\t'):
+                return '\t'  # Tab separator
+            elif text.startswith(marker + ' '):
+                return ' '   # Space separator
+        
+        return '\t'  # Default to tab for better formatting
     
     def apply_bullet_formatting(self, paragraph, formatting: Dict[str, Any], text: str) -> None:
         """
-        Apply complete formatting to a new bullet point with perfect style matching.
+        Apply bullet formatting to a paragraph.
         
         Args:
-            paragraph: Target paragraph
-            formatting: Comprehensive formatting dictionary
-            text: Text to add
+            paragraph: The paragraph to format
+            formatting: Dictionary containing formatting information
+            text: The text to add to the bullet point
         """
-        if not formatting:
-            return
+        try:
+            if not formatting or not text.strip():
+                return
+                
+            # Clear existing runs
+            for run in paragraph.runs:
+                run.text = ""
+                
+            # Get formatting with defaults
+            marker = formatting.get('bullet_marker', '•')
+            separator = formatting.get('bullet_separator', ' ')
             
-        # Clear existing content
-        paragraph.clear()
-        
-        # Apply paragraph-level formatting first
-        self._apply_paragraph_formatting(paragraph, formatting.get('paragraph_formatting', {}))
-        
-        # Apply paragraph style
-        if formatting.get('style'):
-            try:
-                paragraph.style = formatting['style']
-            except Exception:
-                pass
-        
-        # Create bullet point with proper marker
-        bullet_marker = formatting.get('bullet_marker', '-')
-        full_text = f"{bullet_marker} {text.lstrip('-•* ')}"
-        
-        # Apply run-level formatting based on the original formatting
-        runs_formatting = formatting.get('runs_formatting', [])
-        
-        if runs_formatting:
-            # Use the formatting from the first meaningful run (usually the bullet content)
-            primary_format = runs_formatting[0]
-            if len(runs_formatting) > 1:
-                # If there are multiple runs, use the one with actual content (not just the bullet)
-                for run_format in runs_formatting:
-                    if run_format['text'].strip() and not any(marker in run_format['text'] for marker in self.bullet_markers):
-                        primary_format = run_format
-                        break
+            # Add the bullet marker with formatting
+            run = paragraph.add_run(f"{marker}{separator}")
             
-            # Create run with formatted text
-            run = paragraph.add_run(full_text)
-            self._apply_run_formatting(run, primary_format)
-        else:
-            # Fallback: create simple formatted run
-            run = paragraph.add_run(full_text)
+            # Apply run formatting if available
+            if formatting.get('runs_formatting'):
+                self._apply_run_formatting(run, formatting['runs_formatting'][0])
+            
+            # Add the text with formatting
+            run = paragraph.add_run(text)
+            if formatting.get('runs_formatting') and len(formatting['runs_formatting']) > 1:
+                self._apply_run_formatting(run, formatting['runs_formatting'][1])
+            
+            # Apply paragraph formatting if available
+            if 'paragraph_formatting' in formatting:
+                self._apply_paragraph_formatting(paragraph, formatting['paragraph_formatting'])
+                
+            # Apply list formatting if available
+            if 'list_format' in formatting and formatting['list_format'].get('is_list', False):
+                try:
+                    from docx.oxml.ns import qn
+                    from docx.oxml import OxmlElement
+                    
+                    p = paragraph._p  # internal paragraph object
+                    pPr = p.get_or_add_pPr()
+                    
+                    # Add numbering properties
+                    numPr = OxmlElement('w:numPr')
+                    
+                    # Add numbering ID
+                    numId = OxmlElement('w:numId')
+                    numId.set(qn('w:val'), str(formatting['list_format'].get('numId', 1)))
+                    numPr.append(numId)
+                    
+                    # Add level
+                    ilvl = OxmlElement('w:ilvl')
+                    ilvl.set(qn('w:val'), str(formatting['list_format'].get('ilvl', 0)))
+                    numPr.append(ilvl)
+                    
+                    pPr.append(numPr)
+                except Exception as e:
+                    print(f"Warning: Could not set list properties: {e}")
+                    
+        except Exception as e:
+            print(f"Error applying bullet formatting: {e}")
+            # Fallback to simple text if formatting fails
+            paragraph.text = f"{marker}{separator}{text}"
     
     def _apply_paragraph_formatting(self, paragraph, para_formatting: Dict[str, Any]) -> None:
         """
@@ -633,6 +838,7 @@ class ProjectDetector:
                     logger.warning(f"Para {i}: '{text[:50]}...' (len: {len(text)})")
         
         return projects
+    
     def find_projects(self, doc: Document) -> List[Dict[str, Any]]:
         """Find projects in the document and return structured information."""
         projects_data = self.find_projects_and_responsibilities(doc)
@@ -896,27 +1102,111 @@ class DocumentProcessor:
         formatting = None
         fallback_formatting = None
         first_bullet_index = None
-        marker_to_use = '-'
+        marker_to_use = None
 
-        # Search for the first existing bullet point in the responsibilities section
-        for i in range(insertion_point, min(len(doc.paragraphs), project_info.get('responsibilities_end', len(doc.paragraphs)) + 1)):
+        # Search for ANY existing bullet point in the responsibilities section to detect the marker
+        # Expand search range to ensure we find existing bullets
+        search_start = max(0, insertion_point - 5)  # Look a bit before insertion point
+        search_end = min(len(doc.paragraphs), project_info.get('responsibilities_end', len(doc.paragraphs)) + 5)
+        
+        for i in range(search_start, search_end):
             para_formatting = self.formatter.get_bullet_formatting(doc, i)
             if para_formatting:
-                formatting = para_formatting
-                first_bullet_index = i
-                marker_to_use = para_formatting.get('bullet_marker', '-')
-                break
+                detected_marker = para_formatting.get('bullet_marker')
+                # Prioritize bullet markers over dash markers
+                if detected_marker and detected_marker in ['•', '●', '◦', '▪', '▫', '‣']:
+                    formatting = para_formatting
+                    first_bullet_index = insertion_point  # Use original insertion point
+                    marker_to_use = detected_marker
+                    fallback_formatting = {
+                        'bullet_marker': marker_to_use,
+                        'bullet_separator': para_formatting.get('bullet_separator', '\t'),
+                        'style': para_formatting.get('style'),
+                        'paragraph_formatting': para_formatting.get('paragraph_formatting'),
+                        'runs_formatting': para_formatting.get('runs_formatting', [])
+                    }
+                    break
+                # Store first found formatting as backup
+                elif formatting is None:
+                    formatting = para_formatting
+                    first_bullet_index = insertion_point
+                    marker_to_use = detected_marker if detected_marker else '•'
+                    fallback_formatting = {
+                        'bullet_marker': marker_to_use,
+                        'bullet_separator': para_formatting.get('bullet_separator', '\t'),
+                        'style': para_formatting.get('style'),
+                        'paragraph_formatting': para_formatting.get('paragraph_formatting'),
+                        'runs_formatting': para_formatting.get('runs_formatting', [])
+                    }
 
-        # If no existing bullet point found, use the original insertion point
+        # If no existing bullet point found, search the entire document for bullet patterns
         if first_bullet_index is None:
+            marker_to_use = self._detect_document_bullet_marker(doc)
             first_bullet_index = insertion_point
-        else:
-            # Insert after the first existing bullet point
-            first_bullet_index += 1
+            fallback_formatting = {
+                'bullet_marker': marker_to_use,
+                'bullet_separator': '\t',
+                'style': None,
+                'paragraph_formatting': {},
+                'runs_formatting': []
+            }
+        # Don't increment first_bullet_index - insert at the detected position
+        # This ensures new bullets are added in the right location
 
         points_added = 0
         current_insertion_point = first_bullet_index
-        # Insert new points after the first existing point of the project
+        
+        # Find the first bullet point in the current project section
+        first_bullet_index = current_insertion_point
+        while (first_bullet_index < len(doc.paragraphs) and 
+              (not doc.paragraphs[first_bullet_index].text.strip() or 
+               not self.formatter._is_bullet_point(doc.paragraphs[first_bullet_index].text))):
+            first_bullet_index += 1
+        
+        # If we found a bullet point, insert after it
+        if first_bullet_index < len(doc.paragraphs):
+            # Insert after the first bullet point
+            insert_after = first_bullet_index + 1
+            
+            # Insert all new points after the first bullet point
+            for tech_name, points in mixed_tech_stacks.items():
+                for point in points:
+                    try:
+                        if insert_after < len(doc.paragraphs):
+                            new_para = doc.paragraphs[insert_after].insert_paragraph_before()
+                        else:
+                            new_para = doc.add_paragraph()
+                            
+                        # Apply formatting and add the point
+                        if formatting:
+                            formatting['bullet_marker'] = marker_to_use
+                            # Apply paragraph formatting first
+                            pf_data = formatting.get('paragraph_formatting', {})
+                            pf = new_para.paragraph_format
+                            for attr, value in pf_data.items():
+                                if value is not None:
+                                    try:
+                                        setattr(pf, attr, value)
+                                    except Exception:
+                                        continue
+                            # Apply style
+                            if formatting.get('style'):
+                                try:
+                                    new_para.style = formatting['style']
+                                except Exception:
+                                    pass
+                        
+                        self.formatter.apply_bullet_formatting(new_para, formatting, point, fallback_formatting)
+                        points_added += 1
+                        insert_after += 1  # Move insertion point down after adding each point
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to add point '{point}' to project", extra={'error': str(e)})
+                        continue
+                        
+            return points_added
+            
+        # If no bullet points found, use the original insertion point as fallback
         for tech_name, points in mixed_tech_stacks.items():
             for point in points:
                 try:
@@ -924,9 +1214,51 @@ class DocumentProcessor:
                         new_para = doc.paragraphs[current_insertion_point].insert_paragraph_before()
                     else:
                         new_para = doc.add_paragraph()
-                    # Force the marker to match the first bullet
+                        
+                    # Apply formatting
                     if formatting:
                         formatting['bullet_marker'] = marker_to_use
+                        pf_data = formatting.get('paragraph_formatting', {})
+                        pf = new_para.paragraph_format
+                        for attr, value in pf_data.items():
+                            if value is not None:
+                                try:
+                                    setattr(pf, attr, value)
+                                except Exception:
+                                    continue
+                        if formatting.get('style'):
+                            try:
+                                new_para.style = formatting['style']
+                            except Exception:
+                                pass
+                    
+                    self.formatter.apply_bullet_formatting(new_para, formatting, point, fallback_formatting)
+                    points_added += 1
+                    current_insertion_point += 1
+                    
+                except Exception as e:
+                    logger.error(f"Failed to add point '{point}' to project", extra={'error': str(e)})
+                    continue
+                    
+                    # Ensure we use the correct marker and formatting
+                    if formatting:
+                        formatting['bullet_marker'] = marker_to_use
+                        # Apply paragraph formatting first
+                        pf_data = formatting.get('paragraph_formatting', {})
+                        pf = new_para.paragraph_format
+                        for attr, value in pf_data.items():
+                            if value is not None:
+                                try:
+                                    setattr(pf, attr, value)
+                                except Exception:
+                                    continue
+                        # Apply style
+                        if formatting.get('style'):
+                            try:
+                                new_para.style = formatting['style']
+                            except Exception:
+                                pass
+                    
                     self.formatter.apply_bullet_formatting(new_para, formatting, point, fallback_formatting)
                     points_added += 1
                     current_insertion_point += 1
@@ -934,6 +1266,35 @@ class DocumentProcessor:
                     logger.error(f"Failed to add point '{point}' to project", extra={'error': str(e)})
                     continue
         return points_added
+    
+    def _detect_document_bullet_marker(self, doc: Document) -> str:
+        """Detect the most common bullet marker used in the entire document."""
+        marker_counts = {}
+        
+        # Search through all paragraphs to find bullet markers
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if text:
+                # Check for common bullet markers at the start of lines
+                for marker in ['•', '●', '◦', '▪', '▫', '‣', '*', '-']:
+                    if text.startswith(marker + ' '):
+                        marker_counts[marker] = marker_counts.get(marker, 0) + 1
+                        break
+                # Check for numbered bullets
+                import re
+                if re.match(r'^\d+\. ', text):
+                    marker_counts['1.'] = marker_counts.get('1.', 0) + 1
+        
+        # Return the most common marker, preferring non-dash markers
+        if marker_counts:
+            # Sort by count (descending) and prefer non-dash markers
+            sorted_markers = sorted(marker_counts.items(), 
+                                  key=lambda x: (x[1], x[0] != '-'), 
+                                  reverse=True)
+            return sorted_markers[0][0]
+        
+        # Default to bullet if no markers found
+        return '•'
     
     def process_document(self, file_data: Dict) -> Dict[str, Any]:
         """

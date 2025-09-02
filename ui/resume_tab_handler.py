@@ -1,6 +1,7 @@
 import streamlit as st
 from io import BytesIO
 import base64
+import hashlib
 from performance_monitor import performance_decorator
 from validators import TextValidator
 from logger import get_logger
@@ -17,11 +18,17 @@ class ResumeTabHandler:
         """Render the tab content for a single resume file."""
         from config import get_default_email_subject, get_default_email_body, get_smtp_servers
         
-        # Get or initialize file data
-        if file.name not in st.session_state.resume_inputs:
-            st.session_state.resume_inputs[file.name] = {}
+        # Create unique identifier for this file instance
+        file_content = file.read()
+        file.seek(0)  # Reset file pointer
+        file_hash = hashlib.md5(file_content).hexdigest()[:8]
+        unique_key = f"{file.name}_{file_hash}"
         
-        file_data = st.session_state.resume_inputs[file.name]
+        # Get or initialize file data
+        if unique_key not in st.session_state.resume_inputs:
+            st.session_state.resume_inputs[unique_key] = {}
+        
+        file_data = st.session_state.resume_inputs[unique_key]
         
         # Tech stack input
         st.markdown("#### 📝 Tech Stack & Points")
@@ -33,7 +40,7 @@ class ResumeTabHandler:
             value=file_data.get('text', ''),
             height=150,
             help="Example: Python: • Developed web applications • Implemented APIs\nJavaScript: • Created UI components • Used React",
-            key=f"tech_stack_{file.name}"
+            key=f"tech_stack_{unique_key}"
         )
         file_data['text'] = text_input
         
@@ -44,7 +51,7 @@ class ResumeTabHandler:
                 value=file_data.get('manual_text', ''),
                 height=100,
                 help="Enter specific points to add, one per line",
-                key=f"manual_points_{file.name}"
+                key=f"manual_points_{unique_key}"
             )
             file_data['manual_text'] = manual_text
         
@@ -57,7 +64,7 @@ class ResumeTabHandler:
                 "Recipient Email:",
                 value=file_data.get('recipient_email', ''),
                 help="Email address to send the customized resume to",
-                key=f"recipient_email_{file.name}"
+                key=f"recipient_email_{unique_key}"
             )
             file_data['recipient_email'] = recipient_email
             
@@ -65,7 +72,7 @@ class ResumeTabHandler:
                 "Sender Email:",
                 value=file_data.get('sender_email', ''),
                 help="Your email address",
-                key=f"sender_email_{file.name}"
+                key=f"sender_email_{unique_key}"
             )
             file_data['sender_email'] = sender_email
             
@@ -74,7 +81,7 @@ class ResumeTabHandler:
                 value=file_data.get('sender_password', ''),
                 type="password",
                 help="App-specific password for your email account",
-                key=f"sender_password_{file.name}"
+                key=f"sender_password_{unique_key}"
             )
             file_data['sender_password'] = sender_password
         
@@ -84,7 +91,7 @@ class ResumeTabHandler:
                 options=get_smtp_servers(),
                 index=0,
                 help="Select your email provider's SMTP server",
-                key=f"smtp_server_{file.name}"
+                key=f"smtp_server_{unique_key}"
             )
             file_data['smtp_server'] = smtp_server
             
@@ -94,7 +101,7 @@ class ResumeTabHandler:
                 min_value=1,
                 max_value=65535,
                 help="SMTP port (usually 465 for SSL or 587 for TLS)",
-                key=f"smtp_port_{file.name}"
+                key=f"smtp_port_{unique_key}"
             )
             file_data['smtp_port'] = smtp_port
             
@@ -102,7 +109,7 @@ class ResumeTabHandler:
                 "Email Subject:",
                 value=file_data.get('email_subject', get_default_email_subject()),
                 help="Subject line for the email",
-                key=f"email_subject_{file.name}"
+                key=f"email_subject_{unique_key}"
             )
             file_data['email_subject'] = email_subject
         
@@ -111,7 +118,7 @@ class ResumeTabHandler:
             value=file_data.get('email_body', get_default_email_body()),
             height=100,
             help="Email body text",
-            key=f"email_body_{file.name}"
+            key=f"email_body_{unique_key}"
         )
         file_data['email_body'] = email_body
         
@@ -120,11 +127,11 @@ class ResumeTabHandler:
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔍 Preview Changes", key=f"preview_{file.name}"):
+            if st.button("🔍 Preview Changes", key=f"preview_{unique_key}"):
                 self.handle_preview(file, text_input, manual_text)
         
         with col2:
-            if st.button("✅ Generate & Send", key=f"generate_{file.name}"):
+            if st.button("✅ Generate & Send", key=f"generate_{unique_key}"):
                 # Prepare file data for processing
                 file_data_for_processing = {
                     'filename': file.name,
