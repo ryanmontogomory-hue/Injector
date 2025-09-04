@@ -110,6 +110,12 @@ AWS: • Deployed applications using EC2 and S3 • Managed databases with RDS
 
 ## 📁 Project Structure
 
+## 🧪 Testing
+- **Framework**: pytest for unit testing.
+- **Location**: Tests are in the `tests/` directory.
+- **Running Tests**: Activate the virtual environment and run `pytest tests/` from the project root.
+- **Coverage**: Focus on core modules like config and text parsing; expand as needed.
+
 ```
 resume-customizer/
 ├── app.py                          # Main Streamlit application
