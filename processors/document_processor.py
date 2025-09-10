@@ -19,6 +19,16 @@ from logger import get_logger
 logger = get_logger(__name__)
 
 class DocumentProcessor:
+    from functools import lru_cache
+
+    @lru_cache(maxsize=32)
+    def _cached_load_document(self, file_path: str) -> Optional[DocumentType]:
+        """LRU-cached document loader for file paths."""
+        try:
+            return Document(file_path)
+        except Exception as e:
+            logger.error(f"Error loading document from cache: {str(e)}")
+            return None
     """Main document processor that coordinates all operations."""
     
     def __init__(self, config: Optional[Dict] = None):
@@ -87,10 +97,11 @@ class DocumentProcessor:
             self.cleanup_resources()
     
     def _load_document(self, file_data: Union[bytes, BinaryIO, str, Path]) -> Optional[DocumentType]:
-        """Load a document from various input types."""
+        """Load a document from various input types, with LRU cache for file paths."""
         try:
             if isinstance(file_data, (str, Path)):
-                return Document(file_data)
+                # Use LRU cache for file paths
+                return self._cached_load_document(str(file_data))
             elif isinstance(file_data, bytes):
                 return Document(BytesIO(file_data))
             elif hasattr(file_data, 'read') and callable(file_data.read):

@@ -1,10 +1,13 @@
 """
 Point distribution module for Resume Customizer.
-Handles distribution of tech stack points across projects.
+Handles distribution of tech stack points across projects with improved error handling.
 """
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Any, Optional
 import random
+from logger import get_logger
+
+logger = get_logger()
 
 @dataclass
 class DistributionResult:

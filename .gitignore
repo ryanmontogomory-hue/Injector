@@ -83,3 +83,27 @@ temp/
 # Email credentials (if stored in files)
 email_config.json
 credentials.json
+client_secrets.json
+client_secret.json
+
+# Google OAuth tokens and credentials
+token_gdrive.pkl
+*.pkl
+
+# Requirements storage
+requirements.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# SSL certificates
+ssl/
+*.pem
+*.crt
+*.key
+
+# Config files with secrets
+secrets.toml
+.secrets

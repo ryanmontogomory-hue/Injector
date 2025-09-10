@@ -14,8 +14,24 @@ from email.message import EmailMessage
 from config import SMTP_SERVERS, ERROR_MESSAGES
 from retry_handler import get_retry_handler, with_retry
 from logger import get_logger
+from security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
+
 
 logger = get_logger()
+
+# --- Profiling Decorator ---
+import time
+def profile_step(step_name):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            start = time.time()
+            result = func(*args, **kwargs)
+            duration = time.time() - start
+            if duration > 1.0:  # Log only slow steps (>1s)
+                logger.info(f"[PROFILE] {step_name} took {duration:.2f}s")
+            return result
+        return wrapper
+    return decorator
 
 
 class SMTPConnectionPool:
@@ -83,18 +99,39 @@ class SMTPConnectionPool:
 
 
 class EmailSender:
-    """Handles individual email sending operations."""
+    """Handles individual email sending operations with security enhancements."""
     
     def __init__(self, connection_pool: SMTPConnectionPool):
         self.connection_pool = connection_pool
+        self.password_manager = SecurePasswordManager()
+        self.sanitizer = InputSanitizer()
+    
+    def _decrypt_password_if_needed(self, password: str) -> str:
+        """Decrypt password if it's encrypted, otherwise return as-is."""
+        try:
+            # Check if it's encrypted bytes (base64 encoded)
+            if isinstance(password, str) and len(password) > 50 and password.count('=') <= 2:
+                # Might be encrypted, try to decrypt
+                import base64
+                try:
+                    encrypted_bytes = base64.b64decode(password)
+                    return self.password_manager.decrypt_password(encrypted_bytes)
+                except Exception:
+                    # Not encrypted, return as-is
+                    return password
+            return password
+        except Exception as e:
+            logger.warning(f"Password decryption failed: {e}")
+            return password
     
     @with_retry(max_attempts=3, base_delay=2.0)
+    @rate_limit("email_send", limit=10, window=300)  # 10 emails per 5 minutes
     def send_single_email(
         self, 
         smtp_server: str, 
         smtp_port: int,
         sender_email: str,
-        sender_password: str,
+        sender_password: str,  # This should be encrypted bytes in production
         recipient_email: str,
         subject: str,
         body: str,
@@ -118,6 +155,13 @@ class EmailSender:
         Returns:
             Result dictionary with success status and details
         """
+        # Sanitize inputs for security
+        sender_email = self.sanitizer.sanitize_email(sender_email)
+        recipient_email = self.sanitizer.sanitize_email(recipient_email)
+        filename = self.sanitizer.sanitize_filename(filename)
+        subject = self.sanitizer.sanitize_text_input(subject, max_length=200)
+        body = self.sanitizer.sanitize_text_input(body, max_length=10000)
+        
         if smtp_server == "Custom":
             return {
                 'success': False,
@@ -128,7 +172,10 @@ class EmailSender:
         try:
             logger.info(f"Sending email for {filename} to {recipient_email}")
             
-            with self.connection_pool.get_connection(smtp_server, smtp_port, sender_email, sender_password) as smtp:
+            # Decrypt password if needed
+            decrypted_password = self._decrypt_password_if_needed(sender_password)
+            
+            with self.connection_pool.get_connection(smtp_server, smtp_port, sender_email, decrypted_password) as smtp:
                 msg = EmailMessage()
                 msg['Subject'] = subject
                 msg['From'] = sender_email
@@ -175,7 +222,8 @@ class BatchEmailSender:
         """
         Send multiple emails using connection pooling and server grouping.
         
-        Args:
+        @profile_step("send_emails_batch")
+            results = []
             email_tasks: List of email task dictionaries
             progress_callback: Optional progress callback function
             
@@ -216,33 +264,23 @@ class BatchEmailSender:
         return server_groups
     
     def _send_server_group(
-        self, 
-        tasks: List[Dict[str, Any]], 
+        self,
+        tasks: List[Dict[str, Any]],
         progress_callback: Optional[callable]
     ) -> List[Dict[str, Any]]:
         """
-        Send emails for a specific server group.
-        
-        Args:
-            tasks: List of tasks for the same server
-            progress_callback: Optional progress callback
-            
-        Returns:
-            List of results for this server group
+        Send emails for a specific server group using threads for parallelism.
         """
+        import concurrent.futures
         results = []
-        
         if not tasks:
             return results
-        
         first_task = tasks[0]
         email_data = first_task['email_data']
         smtp_server = email_data.get('smtp_server', '')
         smtp_port = email_data.get('smtp_port', 465)
         sender_email = email_data.get('sender', '')
         sender_password = email_data.get('password', '')
-        
-        # Handle custom SMTP server
         if smtp_server == "Custom":
             for task in tasks:
                 results.append({
@@ -251,22 +289,26 @@ class BatchEmailSender:
                     'error': ERROR_MESSAGES["custom_smtp_not_supported"]
                 })
             return results
-        
-        # Send emails using the same connection
+        # Use a single SMTP connection, but send emails in parallel threads
         try:
             with self.connection_pool.get_connection(smtp_server, smtp_port, sender_email, sender_password) as smtp:
-                for task in tasks:
-                    result = self._send_single_email_with_connection(smtp, task, progress_callback)
-                    results.append(result)
+                def send_task(task):
+                    return self._send_single_email_with_connection(smtp, task, progress_callback)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(tasks))) as executor:
+                    future_to_task = {executor.submit(send_task, task): task for task in tasks}
+                    for future in concurrent.futures.as_completed(future_to_task):
+                        try:
+                            result = future.result()
+                        except Exception as e:
+                            result = {'success': False, 'filename': future_to_task[future]['filename'], 'error': str(e)}
+                        results.append(result)
         except Exception as e:
-            # Connection failed for entire group
             for task in tasks:
                 results.append({
                     'success': False,
                     'filename': task['filename'],
                     'error': f'SMTP connection failed: {str(e)}'
                 })
-        
         return results
     
     def _send_single_email_with_connection(

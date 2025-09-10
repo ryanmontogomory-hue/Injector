@@ -3,6 +3,7 @@ from config import UI_CONFIG, get_smtp_servers, get_default_email_subject, get_d
 from validators import get_file_validator, EmailValidator, TextValidator
 from text_parser import LegacyParser
 from logger import get_logger
+from security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
 
 file_validator = get_file_validator()
 config = get_app_config()
@@ -13,30 +14,27 @@ class UIComponents:
     
     @staticmethod
     def render_sidebar():
-        """Render the application sidebar with instructions."""
-        with st.sidebar:
-            st.header("ℹ️ Instructions")
-            st.markdown(UI_CONFIG["sidebar_instructions"])
-            
-            st.header("👀 Preview Features")
-            st.markdown(UI_CONFIG["preview_features"])
-            
-            st.header("🎯 Project Selection")
-            st.markdown(UI_CONFIG["project_selection_info"])
-            
-            st.header("🔍 Format Preservation")
-            st.markdown(UI_CONFIG["format_preservation_info"])
-            
-            st.header("🔒 Security Note")
-            st.markdown(UI_CONFIG["security_note"])
+        """Sidebar intentionally left blank (removed instructions/info)."""
+        pass
 
     @staticmethod
-    def render_file_upload():
+    def render_gdrive_picker(key="gdrive_picker_customizer"):
+        """Render Google Drive picker UI and return selected files."""
+        from ui.gdrive_picker import gdrive_picker_ui
+        st.markdown("---")
+        st.markdown("### 📁 Google Drive File Picker")
+        results = gdrive_picker_ui()
+        # Return list of (filename, BytesIO) tuples
+        return results
+
+    @staticmethod
+    def render_file_upload(key="file_upload"):
         """Render the file upload component with validation."""
         uploaded_files = st.file_uploader(
             UI_CONFIG["file_upload_help"], 
             type="docx", 
-            accept_multiple_files=True
+            accept_multiple_files=True,
+            key=key
         )
         
         if uploaded_files:
@@ -197,3 +195,18 @@ class UIComponents:
                 )
         
         return max_workers, bulk_email_mode, show_progress, performance_stats
+
+
+def admin_resource_panel():
+    """Display real-time resource stats for admins."""
+    from resource_monitor import get_resource_stats
+    st.markdown("## 🖥️ Resource Monitor")
+    try:
+        stats = get_resource_stats()
+        st.metric("CPU Usage (%)", stats['cpu_percent'])
+        st.metric("Memory Usage (%)", stats['mem_percent'])
+        st.metric("Celery Queue Length", stats['celery_queue_length'])
+        if stats['cpu_percent'] > 85 or stats['mem_percent'] > 90:
+            st.error("⚠️ High resource usage! Consider scaling up workers or hardware.")
+    except Exception as e:
+        st.error(f"Failed to load resource stats: {e}")

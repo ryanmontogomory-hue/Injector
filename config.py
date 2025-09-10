@@ -1,11 +1,59 @@
-import streamlit as st
 """
 Configuration module for Resume Customizer application.
-Contains all constants, default values, and configuration settings.
+Contains all constants, default values, and configuration settings with validation.
 """
 
+import os
+import streamlit as st
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class ConfigValidationResult:
+    """Result of configuration validation."""
+    valid: bool
+    issues: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    
+    def add_issue(self, issue: str) -> None:
+        """Add a validation issue."""
+        self.issues.append(issue)
+        self.valid = False
+    
+    def add_warning(self, warning: str) -> None:
+        """Add a validation warning."""
+        self.warnings.append(warning)
+
+
+class ConfigValidator:
+    """Configuration validation utility class."""
+    
+    REQUIRED_APP_CONFIGS = [
+        'title', 'page_title', 'layout', 'max_workers_default', 
+        'max_workers_limit', 'bulk_mode_threshold', 'version'
+    ]
+    
+    @staticmethod
+    def validate_numeric_range(value: Any, min_val: int, max_val: int, name: str) -> Optional[str]:
+        """Validate that a numeric value is within a specified range."""
+        try:
+            num_val = int(value)
+            if num_val < min_val or num_val > max_val:
+                return f"{name} must be between {min_val} and {max_val}, got {num_val}"
+        except (ValueError, TypeError):
+            return f"{name} must be a valid integer, got {type(value).__name__}"
+        return None
+    
+    @staticmethod
+    def validate_string_not_empty(value: Any, name: str) -> Optional[str]:
+        """Validate that a string value is not empty."""
+        if not isinstance(value, str) or not value.strip():
+            return f"{name} must be a non-empty string"
+        return None
+
 
 # Application Configuration
 APP_CONFIG = {
@@ -195,25 +243,92 @@ def get_default_email_body() -> str:
     """Get default email body."""
     return DEFAULT_EMAIL_CONFIG["body"]
 
-def validate_config() -> Dict[str, Any]:
-    """Validate configuration and return any issues."""
-    issues = []
+def validate_config() -> ConfigValidationResult:
+    """Comprehensive configuration validation with detailed feedback.
     
-    # Validate required configurations
-    required_configs = ['title', 'page_title', 'layout', 'max_workers_default', 'max_workers_limit', 'bulk_mode_threshold']
-    for config_key in required_configs:
-        if config_key not in APP_CONFIG:
-            issues.append(f"Missing required config: {config_key}")
+    Returns:
+        ConfigValidationResult: Detailed validation results
+    """
+    result = ConfigValidationResult(valid=True)
+    validator = ConfigValidator()
     
-    # Validate SMTP servers
-    if not SMTP_SERVER_OPTIONS:
-        issues.append("No SMTP servers configured")
+    try:
+        # Validate required configurations
+        for config_key in validator.REQUIRED_APP_CONFIGS:
+            if config_key not in APP_CONFIG:
+                result.add_issue(f"Missing required config: {config_key}")
+            elif APP_CONFIG[config_key] is None:
+                result.add_issue(f"Config {config_key} cannot be None")
+        
+        # Validate string configurations
+        string_configs = ['title', 'page_title', 'layout', 'version']
+        for config_key in string_configs:
+            if config_key in APP_CONFIG:
+                error = validator.validate_string_not_empty(APP_CONFIG[config_key], config_key)
+                if error:
+                    result.add_issue(error)
+        
+        # Validate numeric configurations
+        if 'max_workers_default' in APP_CONFIG:
+            error = validator.validate_numeric_range(
+                APP_CONFIG['max_workers_default'], 1, 16, 'max_workers_default'
+            )
+            if error:
+                result.add_issue(error)
+        
+        if 'max_workers_limit' in APP_CONFIG:
+            error = validator.validate_numeric_range(
+                APP_CONFIG['max_workers_limit'], 1, 32, 'max_workers_limit'
+            )
+            if error:
+                result.add_issue(error)
+        
+        if 'bulk_mode_threshold' in APP_CONFIG:
+            error = validator.validate_numeric_range(
+                APP_CONFIG['bulk_mode_threshold'], 1, 10, 'bulk_mode_threshold'
+            )
+            if error:
+                result.add_issue(error)
+        
+        # Validate performance settings relationships
+        max_default = APP_CONFIG.get('max_workers_default', 0)
+        max_limit = APP_CONFIG.get('max_workers_limit', 0)
+        if max_limit < max_default:
+            result.add_issue(f"max_workers_limit ({max_limit}) should be >= max_workers_default ({max_default})")
+        
+        # Validate SMTP servers
+        if not SMTP_SERVER_OPTIONS:
+            result.add_issue("No SMTP servers configured")
+        elif len(SMTP_SERVER_OPTIONS) < 2:
+            result.add_warning("Only one SMTP server configured, consider adding backup options")
+        
+        # Validate SMTP server configuration
+        for server_name, server_config in SMTP_SERVERS.items():
+            if not isinstance(server_config, dict):
+                result.add_issue(f"SMTP server {server_name} configuration must be a dictionary")
+                continue
+            
+            if 'server' not in server_config or 'port' not in server_config:
+                result.add_issue(f"SMTP server {server_name} missing required 'server' or 'port' configuration")
+            
+            # Validate port numbers
+            port = server_config.get('port')
+            if port and not isinstance(port, int) or port < 1 or port > 65535:
+                result.add_issue(f"SMTP server {server_name} has invalid port: {port}")
+        
+        # Validate parsing configuration
+        if not PARSING_CONFIG.get('tech_name_exclude_words'):
+            result.add_warning("No tech_name_exclude_words configured, may affect parsing accuracy")
+        
+        # Check environment-dependent settings
+        if not Path('logs').exists():
+            result.add_warning("Logs directory does not exist, will be created automatically")
+        
+        # Performance warnings
+        if max_default > 8:
+            result.add_warning(f"max_workers_default ({max_default}) is quite high, may impact system performance")
+        
+    except Exception as e:
+        result.add_issue(f"Configuration validation failed with error: {str(e)}")
     
-    # Validate performance settings
-    if APP_CONFIG.get('max_workers_limit', 0) < APP_CONFIG.get('max_workers_default', 0):
-        issues.append("max_workers_limit should be >= max_workers_default")
-    
-    return {
-        'valid': len(issues) == 0,
-        'issues': issues
-    }
+    return result

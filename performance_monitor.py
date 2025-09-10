@@ -77,7 +77,7 @@ class MetricsCollector:
                 disk = psutil.disk_usage('/')
                 
                 system_metric = SystemMetrics(
-                    cpu_percent=psutil.cpu_percent(interval=0.1),
+                    cpu_percent=psutil.cpu_percent(interval=0.0),
                     memory_percent=memory.percent,
                     memory_used_mb=memory.used / (1024 * 1024),
                     memory_available_mb=memory.available / (1024 * 1024),

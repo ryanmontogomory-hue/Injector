@@ -8,7 +8,9 @@ import logging.handlers
 import os
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, List, Any
+from functools import wraps
+from threading import Lock
 import streamlit as st
 
 
@@ -37,41 +39,67 @@ class CustomFormatter(logging.Formatter):
 
 
 class StreamlitLogHandler(logging.Handler):
-    """Custom log handler that displays logs in Streamlit sidebar."""
+    """Thread-safe custom log handler for Streamlit integration."""
     
-    def __init__(self):
+    def __init__(self, max_logs: int = 50):
         super().__init__()
         self.logs = []
-        self.max_logs = 50
+        self.max_logs = max_logs
+        self._lock = Lock()  # Thread safety for logs list
     
     def emit(self, record):
+        """Emit a log record with thread safety."""
         try:
-            msg = self.format(record)
             timestamp = datetime.fromtimestamp(record.created).strftime('%H:%M:%S')
             
-            # Store log with metadata
+            # Store log with comprehensive metadata
             log_entry = {
                 'timestamp': timestamp,
                 'level': record.levelname.strip('\033[0-9;m'),  # Remove color codes
                 'message': record.getMessage(),
-                'module': record.module
+                'module': getattr(record, 'module', 'unknown'),
+                'funcName': getattr(record, 'funcName', ''),
+                'lineno': getattr(record, 'lineno', 0),
+                'created': record.created
             }
             
-            self.logs.append(log_entry)
-            
-            # Keep only recent logs
-            if len(self.logs) > self.max_logs:
-                self.logs = self.logs[-self.max_logs:]
+            # Thread-safe log storage
+            with self._lock:
+                self.logs.append(log_entry)
+                # Keep only recent logs
+                if len(self.logs) > self.max_logs:
+                    self.logs = self.logs[-self.max_logs:]
                 
-        except Exception:
+        except Exception as e:
+            # Use handleError for proper error handling
             self.handleError(record)
     
-    def get_recent_logs(self, level: Optional[str] = None, count: int = 10):
-        """Get recent logs, optionally filtered by level."""
-        logs = self.logs
-        if level:
-            logs = [log for log in logs if log['level'] == level]
-        return logs[-count:]
+    def get_recent_logs(self, level: Optional[str] = None, count: int = 10) -> List[Dict[str, Any]]:
+        """Get recent logs with optional filtering and thread safety.
+        
+        Args:
+            level: Optional log level filter (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            count: Maximum number of logs to return
+            
+        Returns:
+            List of log entries sorted by timestamp (newest first)
+        """
+        try:
+            with self._lock:
+                # Create a copy to avoid thread safety issues
+                logs_copy = self.logs.copy()
+            
+            # Filter by level if specified
+            if level:
+                logs_copy = [log for log in logs_copy if log['level'].upper() == level.upper()]
+            
+            # Sort by created timestamp (newest first) and limit count
+            sorted_logs = sorted(logs_copy, key=lambda x: x['created'], reverse=True)
+            return sorted_logs[:count]
+            
+        except Exception:
+            # Return empty list on any error
+            return []
 
 
 class ApplicationLogger:
@@ -189,21 +217,45 @@ def get_logger() -> ApplicationLogger:
     return app_logger
 
 
-def log_function_call(func_name: str, **kwargs):
-    """Decorator to log function calls."""
+def log_function_call(func_name: Optional[str] = None, log_args: bool = False, log_result: bool = False):
+    """Enhanced decorator to log function calls with optional argument and result logging.
+    
+    Args:
+        func_name: Optional custom name for the function (defaults to actual function name)
+        log_args: Whether to log function arguments
+        log_result: Whether to log function result (be careful with sensitive data)
+    """
     def decorator(func):
+        @wraps(func)
         def wrapper(*args, **func_kwargs):
+            name = func_name or func.__name__
             start_time = datetime.now()
-            app_logger.debug(f"Starting {func_name}", **kwargs)
+            
+            # Log function start
+            log_msg = f"Starting {name}"
+            if log_args and (args or func_kwargs):
+                log_msg += f" with args={args[:3]}..." if len(args) > 3 else f" with args={args}"
+                if func_kwargs:
+                    log_msg += f" kwargs={list(func_kwargs.keys())}"
+            
+            app_logger.debug(log_msg)
             
             try:
                 result = func(*args, **func_kwargs)
                 duration = (datetime.now() - start_time).total_seconds()
-                app_logger.debug(f"Completed {func_name} in {duration:.2f}s")
+                
+                # Log completion
+                completion_msg = f"Completed {name} in {duration:.2f}s"
+                if log_result and result is not None:
+                    result_preview = str(result)[:100] + "..." if len(str(result)) > 100 else str(result)
+                    completion_msg += f" -> {result_preview}"
+                    
+                app_logger.debug(completion_msg)
                 return result
+                
             except Exception as e:
                 duration = (datetime.now() - start_time).total_seconds()
-                app_logger.error(f"Failed {func_name} after {duration:.2f}s", exception=e)
+                app_logger.error(f"Failed {name} after {duration:.2f}s: {type(e).__name__}: {str(e)}", exception=e)
                 raise
         return wrapper
     return decorator

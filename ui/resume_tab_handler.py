@@ -24,10 +24,11 @@ class ResumeTabHandler:
         file_hash = hashlib.md5(file_content).hexdigest()[:8]
         unique_key = f"{file.name}_{file_hash}"
         
-        # Get or initialize file data
+        # Defensive: check for resume_inputs existence
+        if 'resume_inputs' not in st.session_state:
+            st.session_state['resume_inputs'] = {}
         if unique_key not in st.session_state.resume_inputs:
             st.session_state.resume_inputs[unique_key] = {}
-        
         file_data = st.session_state.resume_inputs[unique_key]
         
         # Tech stack input
@@ -127,10 +128,22 @@ class ResumeTabHandler:
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔍 Preview Changes", key=f"preview_{unique_key}"):
-                self.handle_preview(file, text_input, manual_text)
+            # Throttle preview button: disable for 1s after click
+            preview_key = f"preview_{unique_key}"
+            if 'preview_cooldown' not in st.session_state:
+                st.session_state['preview_cooldown'] = {}
+            cooldown = st.session_state['preview_cooldown'].get(preview_key, 0)
+            import time as _time
+            now = _time.time()
+            if now > cooldown:
+                if st.button("🔍 Preview Changes", key=preview_key):
+                    st.session_state['preview_cooldown'][preview_key] = now + 1.0  # 1 second cooldown
+                    self.handle_preview(file, text_input, manual_text)
+            else:
+                st.button("🔍 Preview Changes (Wait)", key=preview_key+"_wait", disabled=True)
         
         with col2:
+            async_mode = st.checkbox("Process in background (Celery)", key=f"async_mode_{unique_key}")
             if st.button("✅ Generate & Send", key=f"generate_{unique_key}"):
                 # Prepare file data for processing
                 file_data_for_processing = {
@@ -146,7 +159,24 @@ class ResumeTabHandler:
                     'email_subject': email_subject,
                     'email_body': email_body
                 }
-                self.handle_generation(file, file_data_for_processing)
+                if async_mode:
+                    task = self.resume_manager.process_single_resume_async(file_data_for_processing)
+                    st.success(f"🎫 Submitted to background queue. Task ID: {task.id}")
+                    if st.button("🔄 Check Status", key=f"check_status_{unique_key}"):
+                        status = self.resume_manager.get_async_result(task.id)
+                        st.info(f"Task {task.id} status: {status['state']}")
+                        if status['result']:
+                            result = status['result']
+                            if result.get('success'):
+                                st.success(f"✅ Resume processed with {result['points_added']} points added!")
+                                # Download link
+                                b64 = base64.b64encode(result['buffer']).decode()
+                                link = f'<a href="data:application/octet-stream;base64,{b64}" download="{file.name}">📥 Download</a>'
+                                st.markdown(link, unsafe_allow_html=True)
+                            else:
+                                st.error(f"❌ {result.get('error','Unknown error')}")
+                else:
+                    self.handle_generation(file, file_data_for_processing)
 
     @performance_decorator("preview_generation")
     def handle_preview(self, file, user_input, manual_text=""):
@@ -170,12 +200,15 @@ class ResumeTabHandler:
                 result = self.resume_manager.generate_preview(file, user_input, manual_text)
                 if not result['success']:
                     st.error(f"❌ {result['error']}")
+                    if 'errors' in result and result['errors']:
+                        for err in result['errors']:
+                            st.error(f"❌ {err}")
                     return
 
                 st.success(f"✅ Preview generated with {result['points_added']} points added!")
                 st.info(f"Tech stacks highlighted: {', '.join(result['tech_stacks_used'])}")
                 st.info(f"📂 Number of projects in resume: {result['projects_count']}")
-                
+
                 st.markdown("### 📊 Points Distribution by Project")
                 for project, mapping in result['project_points_mapping'].items():
                     with st.expander(f"Project: {project}"):
@@ -198,14 +231,14 @@ class ResumeTabHandler:
                     st.markdown("### 📝 Your Updated Resume Content:")
                     st.info("Install 'mammoth' for better Word format display: pip install mammoth")
                     st.text_area("Updated Resume Content", value=result['preview_content'], height=600)
-                
+
                 st.success("✅ Preview completed! Review changes above.")
             except Exception as e:
                 st.error(f"❌ Error generating preview: {e}")
 
     @performance_decorator("resume_generation")
     def handle_generation(self, file, file_data):
-        """Handle resume generation and email sending."""
+        """Handle resume generation and email sending with async/caching integration."""
         from validators import get_rate_limiter
         user_id = st.session_state.get('user_id', 'anonymous')
         rate_limiter = get_rate_limiter()
@@ -217,8 +250,12 @@ class ResumeTabHandler:
         st.markdown(f"### ✅ Generating Customized Resume: {file.name}")
         logger.log_user_action("resume_generation", file_name=file.name)
 
+        status_placeholder = st.empty()
+        def progress_callback(msg):
+            status_placeholder.info(msg)
+
         with st.spinner(f"Processing {file.name}…"):
-            result = self.resume_manager.process_single_resume(file_data)
+            result = self.resume_manager.process_single_resume(file_data, progress_callback=progress_callback)
             if not result['success']:
                 st.error(f"❌ {result['error']}")
                 return
@@ -243,6 +280,11 @@ class ResumeTabHandler:
                     st.error(f"❌ Email sending failed: {e}")
             else:
                 missing = self.resume_manager.validate_email_config(email_data)['missing_fields']
+        # Show audit log if available
+        if hasattr(self.resume_manager, '_audit_log'):
+            with st.expander("🔍 Audit Log", expanded=False):
+                for entry in self.resume_manager._audit_log[-5:]:
+                    st.code(str(entry))
                 st.warning(f"⚠️ Email skipped—Missing: {', '.join(missing)}")
 
             b64 = base64.b64encode(result['buffer']).decode()

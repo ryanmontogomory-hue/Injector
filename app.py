@@ -3,6 +3,7 @@ Main application file for Resume Customizer - Refactored version.
 Uses modular components for better maintainability and code organization.
 """
 
+
 import streamlit as st
 import base64
 import time
@@ -21,18 +22,57 @@ from retry_handler import get_retry_handler
 
 # Import refactored UI and handlers
 from ui.components import UIComponents
+from ui.secure_components import get_secure_ui_components
 from ui.resume_tab_handler import ResumeTabHandler
 from ui.bulk_processor import BulkProcessor
 from ui.requirements_manager import RequirementsManager, render_requirement_form, render_requirements_list
 from ui.utils import check_file_readiness, prepare_bulk_data
 
+# Import async processing components
+from async_integration import (
+    initialize_async_services,
+    process_documents_async,
+    get_async_results,
+    validate_files_async,
+    track_async_progress
+)
+
+# Import reliability and error handling
+from error_handling_enhanced import (
+    ErrorHandler, 
+    ErrorContext, 
+    ErrorSeverity,
+    handle_errors,
+    ErrorHandlerContext
+)
+
+# Import memory optimization
+from memory_optimizer import (
+    get_memory_optimizer,
+    with_memory_management,
+    memory_efficient_batch
+)
+
+# Import structured logging
+from structured_logger import (
+    get_structured_logger,
+    with_structured_logging,
+    log_performance,
+    app_logger
+)
+
 # Initialize components
 logger = get_logger()
 performance_monitor = get_performance_monitor()
+memory_optimizer = get_memory_optimizer()
 resume_manager = get_resume_manager()
 email_manager = get_email_manager()
 config = get_app_config()
 
+# Admin resource panel integration
+
+@handle_errors("application_health_check", ErrorSeverity.HIGH, return_on_error={"healthy": False, "issues": ["Health check failed"]})
+@with_structured_logging("application", "health_check")
 def check_application_health() -> Dict[str, Any]:
     """Check application health and return status."""
     health_status = {
@@ -66,11 +106,14 @@ def check_application_health() -> Dict[str, Any]:
                     
                 # Attempt automatic cleanup
                 try:
-                    from document_processor import force_memory_cleanup
-                    force_memory_cleanup()
-                    health_status['warnings'].append("🧹 Automatic memory cleanup performed")
+                    cleanup_result = memory_optimizer.optimize_memory(force=True)
+                    if cleanup_result['status'] == 'completed':
+                        health_status['warnings'].append(f"🧹 Memory cleanup performed - saved {cleanup_result['memory_saved_mb']:.1f}MB")
+                    else:
+                        health_status['warnings'].append("🧹 Memory cleanup attempted")
                 except Exception as e:
-                    logger.warning(f"Automatic memory cleanup failed: {e}")
+                    logger.warning(f"Memory optimization failed: {e}")
+                    health_status['warnings'].append("⚠️ Memory cleanup failed - consider manual restart")
                     
         except ImportError:
             health_status['warnings'].append("psutil not available - memory monitoring disabled")
@@ -140,8 +183,33 @@ def render_requirements_tab():
     with tab2:
         render_requirements_list(st.session_state.requirements_manager)
 
+@handle_errors("main_application", ErrorSeverity.CRITICAL, show_to_user=True)
 def main():
     """Main application function."""
+    # Set page config as early as possible to avoid reruns and layout recalculations
+    st.set_page_config(
+        page_title=APP_CONFIG["title"],
+        page_icon="📝",
+        layout=APP_CONFIG["layout"],
+        initial_sidebar_state="expanded"
+    )
+    
+    # Preload essential modules for better performance
+    try:
+        from lazy_imports import preload_essential_modules, get_lazy_module_stats
+        preload_essential_modules()
+    except ImportError:
+        pass  # Lazy loading system not available
+    
+    # Initialize async services early
+    if 'async_initialized' not in st.session_state:
+        with st.spinner("Initializing high-performance async services..."):
+            async_success = initialize_async_services()
+            st.session_state.async_initialized = async_success
+            if async_success:
+                st.success("⚡ High-performance mode enabled!")
+                time.sleep(0.5)  # Brief pause to show message
+    
     # Check application health first
     health_status = check_application_health()
     if not health_status['healthy']:
@@ -159,21 +227,21 @@ def main():
         from resume_processor import get_resume_manager
         st.session_state.bulk_processor = BulkProcessor(resume_manager=get_resume_manager())
     
-    # Set page config
-    st.set_page_config(
-        page_title=APP_CONFIG["title"],
-        page_icon="📝",
-        layout=APP_CONFIG["layout"],
-        initial_sidebar_state="expanded"
-    )
 
     # Validate configuration first
     config_validation = validate_config()
-    if not config_validation['valid']:
+    if not config_validation.valid:
         st.error("❌ Configuration Error")
-        for issue in config_validation['issues']:
+        for issue in config_validation.issues:
             st.error(f"• {issue}")
         st.stop()
+    
+    # Display configuration warnings if any
+    if config_validation.warnings:
+        with st.sidebar:
+            st.warning("⚠️ Configuration Warnings")
+            for warning in config_validation.warnings:
+                st.warning(f"• {warning}")
     
     validate_session_state()
     if 'resume_inputs' not in st.session_state:
@@ -184,6 +252,7 @@ def main():
     logger.info("Application started")
 
     ui = UIComponents()
+    secure_ui = get_secure_ui_components()
     tab_handler = ResumeTabHandler(resume_manager)
     bulk_processor = BulkProcessor(resume_manager)
 
@@ -192,122 +261,237 @@ def main():
     st.markdown("Customize your resume and send it to multiple recipients")
     
     # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab_labels = [
         "📄 Resume Customizer", 
         "📤 Bulk Processor", 
         "📋 Requirements",
         "⚙️ Settings"
-    ])
+    ]
+    if st.session_state.get('show_preview_all_tab') and st.session_state.get('all_resume_previews'):
+        tab_labels.insert(1, "👁️ Preview ALL")
+    tabs = st.tabs(tab_labels)
 
-    with tab1:
+    tab_idx = 0
+    tab_customizer = tabs[tab_idx]
+    tab_idx += 1
+    if "👁️ Preview ALL" in tab_labels:
+        tab_preview_all = tabs[tab_idx]
+        tab_idx += 1
+    tab_bulk = tabs[tab_idx]
+    tab_idx += 1
+    tab_requirements = tabs[tab_idx]
+    tab_idx += 1
+    tab_settings = tabs[tab_idx]
+
+    with tab_customizer:
         # Resume Customizer Tab
         ui.render_sidebar()
+        secure_ui.display_security_status()
         display_logs_in_sidebar()
+        
+        # Add async progress tracking to sidebar
+        track_async_progress()
+        
         # Performance metrics are now displayed in the sidebar via the UI components
+        
+        # File upload UI - moved inside the Resume Customizer tab
+        st.markdown("**Choose file source:**")
+        file_source = st.radio("Select file source", ["Local Upload", "Google Drive"], horizontal=True)
+        all_files = []
+        if file_source == "Local Upload":
+            # Local upload is lightweight, render immediately
+            with st.spinner("Loading local file upload..."):
+                uploaded_files = ui.render_file_upload(key="file_upload_customizer")
+            if uploaded_files:
+                all_files.extend([(file.name, file) for file in uploaded_files])
+        else:
+            # Lazy load the Google Drive picker only on demand
+            if st.button("Open Google Drive Picker", key="open_gdrive_picker"):
+                with st.spinner("Loading Google Drive picker..."):
+                    gdrive_files = ui.render_gdrive_picker(key="gdrive_picker_customizer")
+                if gdrive_files:
+                    all_files.extend(gdrive_files)
 
-        uploaded_files = ui.render_file_upload()
-
-        if uploaded_files:
+        if all_files:
+            # Add async file validation option
+            if len(all_files) > 1 and st.session_state.get('async_initialized'):
+                if st.button("⚡ Validate All Files (Async)", help="Validate all files simultaneously using async processing"):
+                    with st.spinner("Starting async validation..."):
+                        validation_result = validate_files_async([f[1] for f in all_files])
+                        if validation_result['success']:
+                            st.info(validation_result['message'])
+                            st.balloons()
+                        else:
+                            st.error(validation_result['message'])
+            
             st.markdown("### 🔽 Paste Tech Stack + Points for Each Resume")
-            tabs = st.tabs([file.name for file in uploaded_files])
-            for i, file in enumerate(uploaded_files):
-                with tabs[i]:
-                    tab_handler.render_tab(file)
-
+            # Lazy-render file tabs to avoid heavy UI cost on first load
+            with st.expander("Show resume inputs", expanded=True):
+                tabs = st.tabs([f[0] for f in all_files])
+                for i, (file_name, file_obj) in enumerate(all_files):
+                    with tabs[i]:
+                        tab_handler.render_tab(file_obj)
+            
+            # Enhanced bulk operations section
             st.markdown("---")
             st.markdown("## 🚀 Bulk Operations (High Performance Mode)")
-
-            st.markdown("### 📧 Quick Email All Resumes")
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.info("📨 Send all configured resumes via email simultaneously (processes and emails in one click)")
-            with col2:
-                if st.button(
-                    f"📧 SEND ALL {len(uploaded_files)} RESUMES VIA EMAIL",
-                    type="secondary",
-                    help="Process and send all resumes with email configuration via email simultaneously",
-                    key="send_all_emails_btn"
-                ):
-                    with st.spinner("📨 Sending all resumes via email…"):
-                        try:
-                            bulk_processor.send_all_resumes_via_email(uploaded_files)
-                        except Exception as e:
-                            st.error(f"Error sending emails: {e}")
-
-            if len(uploaded_files) >= config["bulk_mode_threshold"]:
-                st.markdown("### ⚡ Fast Bulk Processing for Multiple Resumes")
-                max_workers, bulk_email_mode, show_progress, performance_stats = ui.render_bulk_settings(len(uploaded_files))
-                ready_files, missing_data_files = check_file_readiness(uploaded_files)
-                if missing_data_files:
-                    st.warning(f"⚠️ Missing tech stack data for: {', '.join(missing_data_files)}")
-                    st.info("Please fill in the tech stack data in the individual tabs above before using bulk mode.")
-                if ready_files:
-                    st.success(f"✅ Ready to process {len(ready_files)} resumes: {', '.join(ready_files)}")
-                    if st.button(
-                        f"🚀 BULK PROCESS ALL {len(ready_files)} RESUMES",
-                        type="primary",
-                        help="Process all resumes simultaneously for maximum speed",
-                        key="bulk_process_btn"
-                    ):
-                        files_data = prepare_bulk_data(uploaded_files, ready_files)
-                        with st.spinner("⚡ Processing all resumes…"):
-                            try:
-                                bulk_processor.process_bulk_resumes(
-                                    ready_files, files_data, max_workers, show_progress, performance_stats, bulk_email_mode
-                                )
-                            except Exception as e:
-                                st.error(f"Error during bulk processing: {e}")
+            if st.session_state.get('async_initialized'):
+                st.success("⚡ Async processing enabled - Up to 6x faster bulk operations!")
             else:
-                st.info(f"💡 Bulk mode is available when you have {config['bulk_mode_threshold']}+ resumes (currently: {len(uploaded_files)})")
-                st.markdown("Process multiple resumes simultaneously to save time and effort. Bulk mode enables parallel processing for faster results.")
+                st.warning("Async processing not available - using standard processing")
+            
+            st.info("This tab is for individual resume processing only.\n\nFor bulk operations (generate/send all resumes), please go to the 'Bulk Processor' tab.")
         else:
-            st.info("👆 Please upload one or more DOCX resumes to get started.")
+            st.info("👆 Please upload or pick one or more DOCX resumes to get started.")
 
-    with tab2:
+    if "👁️ Preview ALL" in tab_labels:
+        with tab_preview_all:
+            st.header("👁️ Preview ALL Resumes")
+            previews = st.session_state.get('all_resume_previews', [])
+            if not previews:
+                st.info("No previews available. Please generate all resumes first.")
+            else:
+                for preview in previews:
+                    file_name = preview.get('file_name') or preview.get('filename') or "Resume"
+                    st.subheader(f"📄 {file_name}")
+                    # Try to show HTML preview if available, else fallback to text
+                    if 'preview_html' in preview:
+                        st.markdown(preview['preview_html'], unsafe_allow_html=True)
+                    elif 'preview_content' in preview:
+                        st.text_area("Preview Content", value=preview['preview_content'], height=400)
+                    else:
+                        st.info("No preview content available for this resume.")
+            if st.button("❌ Close Preview ALL Tab", key="close_preview_all_tab"):
+                st.session_state['show_preview_all_tab'] = False
+                st.experimental_rerun()
+
+    with tab_bulk:
         # Bulk Processor Tab
         st.header("📤 Bulk Processor")
         st.write("Process multiple resumes simultaneously for maximum speed.")
-        
-        # Display application health status
-        st.subheader("🔍 Application Health")
-        if health_status['healthy']:
-            st.success("✅ Application is healthy")
+        st.info("For individual resume processing, use the 'Resume Customizer' tab.\n\nFor bulk operations (generate/send all resumes), use this tab.")
+
+        uploaded_files = st.session_state.get('file_upload_customizer', None)
+        if not uploaded_files:
+            st.warning("No resumes uploaded. Please upload resumes in the 'Resume Customizer' tab first.")
         else:
-            st.error("❌ Application has issues")
-        
-        if health_status['warnings']:
-            st.warning("\n".join(["⚠️ " + w for w in health_status['warnings']]))
+            st.markdown("### 📧 Bulk Resume Actions")
+            st.info("You can generate all resumes or send all via email with one click.")
+            bulk_processor.render_bulk_actions(uploaded_files)
 
-    with tab3:
-        # Requirements Management Tab
-        render_requirements_tab()
+    with tab_requirements:
+        # Requirements Management Tab with Enhanced Features
+        try:
+            from requirements_integration import render_smart_customization_panel, render_requirements_analytics
+            
+            # Tabs within the requirements tab for better organization
+            req_subtabs = st.tabs(["📝 Create/View", "🎯 Smart Customization", "📊 Analytics"])
+            
+            with req_subtabs[0]:
+                render_requirements_tab()
+            
+            with req_subtabs[1]:
+                render_smart_customization_panel()
+            
+            with req_subtabs[2]:
+                render_requirements_analytics()
+                
+        except ImportError as e:
+            logger.warning(f"Enhanced requirements features not available: {e}")
+            # Fallback to basic requirements tab
+            render_requirements_tab()
 
-    with tab4:
+    with tab_settings:
         # Settings Tab
         st.header("⚙️ Application Settings")
         st.write("Configure application settings and preferences.")
         
+        # Async Processing Status
+        st.subheader("⚡ High-Performance Mode")
+        if st.session_state.get('async_initialized'):
+            st.success("✅ Async processing enabled - Experience up to 6x faster processing!")
+            
+            # Cache statistics
+            try:
+                from performance_cache import get_cache_manager
+                cache_manager = get_cache_manager()
+                st.markdown("**Cache Performance:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    doc_cache = cache_manager.get_cache('document')
+                    st.metric("Document Cache", f"{doc_cache.size}/{doc_cache.max_size}")
+                with col2:
+                    parse_cache = cache_manager.get_cache('parsing')
+                    st.metric("Parse Cache", f"{parse_cache.size}/{parse_cache.max_size}")
+                with col3:
+                    file_cache = cache_manager.get_cache('file')
+                    st.metric("File Cache", f"{file_cache.size}/{file_cache.max_size}")
+            except Exception as e:
+                st.warning(f"Cache stats unavailable: {e}")
+                
+            # Memory cleanup option
+            if st.button("🧹 Force Memory Cleanup"):
+                try:
+                    background_manager = st.session_state.background_task_manager
+                    task_id = background_manager.start_memory_cleanup()
+                    st.success("Memory cleanup task started in background")
+                    
+                    # Also clear lazy import cache if available
+                    try:
+                        from lazy_imports import clear_lazy_cache
+                        clear_lazy_cache()
+                        st.info("Lazy import cache cleared")
+                    except ImportError:
+                        pass
+                except Exception as e:
+                    st.error(f"Failed to start memory cleanup: {e}")
+        else:
+            st.error("❌ Async processing disabled - Performance may be slower")
+            if st.button("🔄 Retry Async Initialization"):
+                st.session_state.async_initialized = initialize_async_services()
+                st.experimental_rerun()
+        
+        st.markdown("---")
+        
         # Display application health status
         st.subheader("🔍 Application Health")
         if health_status['healthy']:
             st.success("✅ Application is healthy")
         else:
             st.error("❌ Application has issues")
-        
         if health_status['warnings']:
             st.warning("\n".join(["⚠️ " + w for w in health_status['warnings']]))
-
-    st.markdown("---")
-    if st.checkbox("Show Performance Summary", value=False):
-        summary = performance_monitor.get_performance_summary()
-        if summary.get('system'):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("CPU Usage", f"{summary['system'].get('cpu_percent', 0):.1f}%")
-            with col2:
-                st.metric("Memory Usage", f"{summary['system'].get('memory_percent', 0):.1f}%")
-            with col3:
-                st.metric("Memory Used", f"{summary['system'].get('memory_used_mb', 0):.0f}MB")
+        
+        # Performance Summary - moved inside settings tab
+        st.markdown("---")
+        st.subheader("📊 Performance Summary")
+        if st.checkbox("Show Performance Details", value=False, key="settings_performance_checkbox"):
+            with st.spinner("Collecting performance summary..."):
+                summary = performance_monitor.get_performance_summary()
+            if summary.get('system'):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("CPU Usage", f"{summary['system'].get('cpu_percent', 0):.1f}%")
+                with col2:
+                    st.metric("Memory Usage", f"{summary['system'].get('memory_percent', 0):.1f}%")
+                with col3:
+                    st.metric("Memory Used", f"{summary['system'].get('memory_used_mb', 0):.0f}MB")
+                    
+                # Show lazy loading stats if available
+                try:
+                    from lazy_imports import get_lazy_module_stats
+                    lazy_stats = get_lazy_module_stats()
+                    if lazy_stats['loaded_count'] > 0:
+                        st.markdown("**Lazy Loading:**")
+                        st.text(f"Loaded modules: {lazy_stats['loaded_count']}")
+                        if lazy_stats['loaded_modules']:
+                            with st.expander("Loaded modules details"):
+                                for module in lazy_stats['loaded_modules']:
+                                    st.text(f"• {module}")
+                except ImportError:
+                    pass
+            else:
+                st.info("Performance data not available.")
 
     # Footer with version info
     version = config.get('version', '1.0.0')

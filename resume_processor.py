@@ -1,27 +1,227 @@
 """
 Resume processing module for Resume Customizer application.
-Coordinates all resume processing operations including parsing, document processing, and email handling.
+Coordinates all resume processing operations with improved architecture and error handling.
 """
 
-import concurrent.futures
-from typing import List, Dict, Any, Optional, Callable
+import threading
+import functools
+import queue
+import os
+import time
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional, Callable, Tuple, Union
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+
+# External imports
 from docx import Document
 import streamlit as st
 
+# Local imports
+from audit_logger import audit_logger
+from logger import get_logger
 from text_parser import parse_input_text, get_parser
 from document_processor import get_document_processor, FileProcessor
 from email_handler import get_email_manager
 from config import ERROR_MESSAGES, SUCCESS_MESSAGES, APP_CONFIG
+from security_enhancements import rate_limit
+from structured_logger import get_structured_logger, with_structured_logging, processing_logger
+from error_handling_enhanced import handle_errors, ErrorSeverity, ErrorHandlerContext
+
+logger = get_logger()
+
+# Constants
+CACHE_TTL_SECONDS = 300  # 5 minutes
+MAX_CACHE_SIZE = 100
+DEFAULT_PROCESSING_TIMEOUT = 30
+
+
+@dataclass
+class ProcessingResult:
+    """Data class for processing results with comprehensive information."""
+    success: bool
+    filename: str
+    error: Optional[str] = None
+    points_added: int = 0
+    processing_time: float = 0.0
+    tech_stacks_used: List[str] = field(default_factory=list)
+    modified_content: Optional[bytes] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CacheEntry:
+    """Cache entry with TTL support."""
+    result: ProcessingResult
+    timestamp: datetime
+    access_count: int = 0
+    
+    def is_expired(self) -> bool:
+        """Check if cache entry is expired."""
+        return datetime.now() - self.timestamp > timedelta(seconds=CACHE_TTL_SECONDS)
+
+
+def profile_step(step_name: str):
+    """Decorator to profile and log slow operations."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.time()
+            try:
+                result = func(*args, **kwargs)
+                duration = time.time() - start
+                if duration > 1.0:  # Log only slow steps (>1s)
+                    logger.info(f"[PROFILE] {step_name} took {duration:.2f}s")
+                return result
+            except Exception as e:
+                duration = time.time() - start
+                logger.error(f"[PROFILE] {step_name} failed after {duration:.2f}s: {e}")
+                raise
+        return wrapper
+    return decorator
+
+
+
+def _process_single_resume_worker(payload: Dict[str, Any]) -> ProcessingResult:
+    """Worker function for processing a single resume in a separate process.
+    
+    Args:
+        payload: Serializable dictionary containing file data and processing parameters
+        
+    Returns:
+        ProcessingResult with processing outcome
+    """
+    start_time = time.time()
+    filename = payload.get('filename', 'unknown')
+    
+    try:
+        # Validate payload
+        if 'file_content' not in payload:
+            return ProcessingResult(
+                success=False,
+                filename=filename,
+                error="Missing file content in payload",
+                processing_time=time.time() - start_time
+            )
+        
+        # Reconstruct file object from bytes
+        file_obj = BytesIO(payload['file_content'])
+        
+        # Create processor and process resume
+        processor = ResumeProcessor()
+        file_data = {
+            'filename': filename,
+            'file': file_obj,
+            'text': payload.get('text', ''),
+            'recipient_email': payload.get('recipient_email', ''),
+            'sender_email': payload.get('sender_email', ''),
+            'sender_password': payload.get('sender_password', ''),
+            'smtp_server': payload.get('smtp_server', ''),
+            'smtp_port': payload.get('smtp_port', 465),
+            'email_subject': payload.get('email_subject', ''),
+            'email_body': payload.get('email_body', ''),
+        }
+        
+        result = processor.process_single_resume(file_data)
+        
+        # Convert to ProcessingResult if it's not already
+        if isinstance(result, dict):
+            return ProcessingResult(
+                success=result.get('success', False),
+                filename=filename,
+                error=result.get('error'),
+                points_added=result.get('points_added', 0),
+                processing_time=time.time() - start_time,
+                tech_stacks_used=result.get('tech_stacks_used', []),
+                modified_content=result.get('modified_content'),
+                metadata=result.get('metadata', {})
+            )
+        return result
+        
+    except Exception as e:
+        logger.error(f"Worker error processing {filename}: {e}")
+        return ProcessingResult(
+            success=False,
+            filename=filename,
+            error=str(e),
+            processing_time=time.time() - start_time
+        )
 
 
 class ResumeProcessor:
+    @rate_limit("resume_processing", limit=20, window=300)  # 20 resumes per 5 minutes
+    def process_single_resume_async(self, file_data: Dict[str, Any]):
+        """
+        Submit a resume processing job to Celery and return the AsyncResult.
+        """
+        try:
+            from tasks import process_resume_task
+        except ImportError:
+            raise RuntimeError("Celery tasks module not found. Make sure tasks.py exists and Celery is installed.")
+        return process_resume_task.delay(file_data)
+
+    def get_async_result(self, task_id: str):
+        """
+        Get the result/status of a Celery async task by task_id.
+        """
+        try:
+            from celeryconfig import celery_app
+        except ImportError:
+            raise RuntimeError("Celery config not found. Make sure celeryconfig.py exists and Celery is installed.")
+        async_result = celery_app.AsyncResult(task_id)
+        return {
+            'state': async_result.state,
+            'result': async_result.result if async_result.ready() else None
+        }
+    @rate_limit("batch_processing", limit=5, window=600)  # 5 batch operations per 10 minutes
+    def process_all_resumes(self, files: List[Any]) -> List[Dict[str, Any]]:
+        """
+        Process all resumes for bulk preview/generation (no email).
+        Returns a list of preview/result dicts for each file.
+        """
+        results = []
+        for file in files:
+            # Try to get file name and text from session state if available
+            file_name = getattr(file, 'name', 'Resume')
+            resume_inputs = st.session_state.get('resume_inputs', {})
+            file_data = resume_inputs.get(file_name, {})
+            text = file_data.get('text', '')
+            manual_text = file_data.get('manual_text', '')
+            # Use PreviewGenerator for consistent preview output
+            try:
+                from resume_processor import PreviewGenerator
+                previewer = PreviewGenerator()
+                preview_result = previewer.generate_preview(file, text, manual_text)
+                preview_result['file_name'] = file_name
+                results.append(preview_result)
+            except Exception as e:
+                results.append({'file_name': file_name, 'success': False, 'error': str(e)})
+        return results
     """Main processor for individual resume operations."""
     
     def __init__(self):
         self.text_parser = get_parser()
         self.doc_processor = get_document_processor()
         self.file_processor = FileProcessor()
+        # Advanced cache: (filename, text, manual_text) -> result
+        self._result_cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_lock = threading.Lock()
+        self._audit_log = []
+        self._task_queue = queue.Queue()
+        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread.start()
+
+    def _worker_loop(self):
+        while True:
+            try:
+                task, args, kwargs = self._task_queue.get()
+                try:
+                    task(*args, **kwargs)
+                except Exception as e:
+                    logger.error(f"Background task error: {e}")
+            except Exception:
+                pass
         
     def process_single_resume(
         self, 
@@ -38,38 +238,67 @@ class ResumeProcessor:
         Returns:
             Result dictionary with processing status and data
         """
+        cache_key = f"{file_data['filename']}|{file_data.get('text','')}|{file_data.get('manual_text','')}"
+        with self._cache_lock:
+            if cache_key in self._result_cache:
+                logger.info(f"[CACHE] Hit for {file_data['filename']}")
+                return self._result_cache[cache_key]
         try:
             filename = file_data['filename']
             file_obj = file_data['file']
             raw_text = file_data['text']
-            
+            user = None
+            try:
+                user = st.session_state.get('user_id', 'unknown')
+            except Exception:
+                user = 'unknown'
+            audit_logger.log(
+                action="process_single_resume",
+                user=user,
+                details={"filename": filename},
+                status="started"
+            )
             if progress_callback:
                 progress_callback(f"Parsing tech stacks for {filename}...")
-            
-            # Parse tech stacks and points using the flexible parser
+            # Parse tech stacks and points (now backed by LRU cache in parser)
             selected_points, tech_stacks_used = self.text_parser.parse_tech_stacks(raw_text)
-            
             if not selected_points or not tech_stacks_used:
-                return {
-                    'success': False, 
-                    'error': ERROR_MESSAGES["no_tech_stacks"].format(filename=filename), 
+                result = {
+                    'success': False,
+                    'error': ERROR_MESSAGES["no_tech_stacks"].format(filename=filename),
                     'filename': filename
                 }
-            
+                audit_logger.log(
+                    action="process_single_resume",
+                    user=user,
+                    details={"filename": filename},
+                    status="failed",
+                    error=result['error']
+                )
+                with self._cache_lock:
+                    self._result_cache[cache_key] = result
+                return result
             if progress_callback:
                 progress_callback(f"Processing document for {filename}...")
-            
             # Load and process document
             doc = Document(file_obj)
             projects_data = self.doc_processor.project_detector.find_projects_and_responsibilities(doc)
-            
             if not projects_data:
-                return {
-                    'success': False, 
-                    'error': ERROR_MESSAGES["no_projects"].format(filename=filename), 
+                result = {
+                    'success': False,
+                    'error': ERROR_MESSAGES["no_projects"].format(filename=filename),
                     'filename': filename
                 }
-            
+                audit_logger.log(
+                    action="process_single_resume",
+                    user=user,
+                    details={"filename": filename},
+                    status="failed",
+                    error=result['error']
+                )
+                with self._cache_lock:
+                    self._result_cache[cache_key] = result
+                return result
             # Convert to structured format
             projects = []
             for i, project_tuple in enumerate(projects_data):
@@ -83,45 +312,39 @@ class ResumeProcessor:
                     'responsibilities_start': start_idx,
                     'responsibilities_end': end_idx
                 })
-            
             # Distribute and add points using round-robin logic
             distribution_result = self.doc_processor.point_distributor.distribute_points_to_projects(
                 projects, (selected_points, tech_stacks_used)
             )
             if not distribution_result['success']:
+                with self._cache_lock:
+                    self._result_cache[cache_key] = distribution_result
                 return distribution_result
             # Add points to each project with mixed tech stacks
             total_added = 0
             # Sort projects by insertion point to process them in order
             sorted_projects = sorted(distribution_result['distribution'].items(),
                                    key=lambda x: x[1]['insertion_point'])
-            
             # Keep track of how many paragraphs we've added to adjust insertion points
             paragraph_offset = 0
-            
             for project_title, project_info in sorted_projects:
                 # Adjust insertion point based on previous additions
                 adjusted_project_info = project_info.copy()
                 adjusted_project_info['insertion_point'] += paragraph_offset
                 if 'responsibilities_end' in adjusted_project_info:
                     adjusted_project_info['responsibilities_end'] += paragraph_offset
-                
                 added = self.doc_processor.add_points_to_project(doc, adjusted_project_info)
                 total_added += added
-                
                 # Update the offset for subsequent projects
                 paragraph_offset += added
             points_added = total_added
-            
             if progress_callback:
                 progress_callback(f"Saving document for {filename}...")
-            
             # Save to buffer
             output_buffer = BytesIO()
             doc.save(output_buffer)
             output_buffer.seek(0)
-            
-            return {
+            result = {
                 'success': True,
                 'filename': filename,
                 'buffer': output_buffer.getvalue(),
@@ -129,6 +352,35 @@ class ResumeProcessor:
                 'points_added': points_added,
                 'email_data': self._extract_email_data(file_data)
             }
+            audit_logger.log(
+                action="process_single_resume",
+                user=user,
+                details={"filename": filename},
+                status="success"
+            )
+            with self._cache_lock:
+                self._result_cache[cache_key] = result
+            return result
+        except Exception as e:
+            # Retry logic: up to 2 more times for transient errors
+            for attempt in range(2):
+                try:
+                    time.sleep(0.5 * (attempt + 1))
+                    return self.process_single_resume(file_data, progress_callback)
+                except Exception:
+                    continue
+            logger.error(f"Error processing resume {file_data.get('filename','?')}: {e}")
+            result = {'success': False, 'filename': file_data.get('filename', '?'), 'error': str(e)}
+            audit_logger.log(
+                action="process_single_resume",
+                user=user if 'user' in locals() else 'unknown',
+                details={"filename": file_data.get('filename', '?')},
+                status="failed",
+                error=str(e)
+            )
+            with self._cache_lock:
+                self._result_cache[cache_key] = result
+            return result
             
         except Exception as e:
             return {
@@ -165,12 +417,23 @@ class BulkResumeProcessor:
         self.resume_processor = ResumeProcessor()
         self.file_processor = FileProcessor()
         self.email_manager = get_email_manager()
+        # Determine a sensible default for max workers based on CPU
+        try:
+            import os
+            cpu_count = os.cpu_count() or 4
+            # Use min to avoid oversubscription; ThreadPool benefits from I/O overlap but docx is CPU-heavy
+            self._default_workers = max(2, min(8, cpu_count))
+        except Exception:
+            self._default_workers = 4
     
     def process_resumes_bulk(
-        self, 
-        files_data: List[Dict[str, Any]], 
+        self,
+        files_data: List[Dict[str, Any]],
         max_workers: int = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        use_process_pool: Optional[bool] = None,
+        memory_limit_mb: int = 1024,
+        ui_update_interval: float = 0.5
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Process multiple resumes in parallel.
@@ -183,47 +446,114 @@ class BulkResumeProcessor:
         Returns:
             Tuple of (processed_resumes, failed_resumes)
         """
+        import time, psutil, os
         processed_resumes = []
         failed_resumes = []
-        
+        last_ui_update = time.time()
         if max_workers is None:
-            max_workers = min(APP_CONFIG["max_workers_default"], len(files_data))
-        
-        # Optimization: Ensure all files have proper names before processing
+            cpu_count = os.cpu_count() or 4
+            # For CPU-bound, use cpu_count; for I/O-bound, allow more
+            max_workers = min(max(cpu_count, 4), len(files_data), 16)
+        if max_workers < 1:
+            max_workers = 1
+
+        if use_process_pool is None:
+            use_process_pool = len(files_data) >= 3 and (os.cpu_count() or 2) > 2
+
+        # Ensure all files have proper names before processing
         optimized_files_data = []
         for file_data in files_data:
             file_data['file'] = self.file_processor.ensure_file_has_name(
                 file_data['file'], file_data['filename']
             )
             optimized_files_data.append(file_data)
-        
-        # Use ThreadPoolExecutor for parallel processing
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all resume processing tasks
-            future_to_file = {
-                executor.submit(self.resume_processor.process_single_resume, file_data, progress_callback): 
-                file_data['filename'] for file_data in optimized_files_data
-            }
-            
-            # Collect results as they complete
-            for future in concurrent.futures.as_completed(future_to_file):
-                filename = future_to_file[future]
-                try:
-                    result = future.result()
-                    if result['success']:
-                        processed_resumes.append(result)
-                    else:
-                        failed_resumes.append(result)
-                except Exception as e:
-                    failed_resumes.append({
-                        'success': False,
-                        'filename': filename,
-                        'error': str(e)
+
+        def memory_check():
+            try:
+                process = psutil.Process(os.getpid())
+                mem_mb = process.memory_info().rss / 1024 / 1024
+                return mem_mb > memory_limit_mb
+            except Exception:
+                return False
+
+        def throttled_progress_callback(msg):
+            nonlocal last_ui_update
+            now = time.time()
+            if progress_callback and (now - last_ui_update > ui_update_interval):
+                progress_callback(msg)
+                last_ui_update = now
+
+        if use_process_pool:
+            # Only send minimal data: file path, not bytes
+            # If file objects are not file paths, fallback to bytes
+            payloads = []
+            for file_data in optimized_files_data:
+                file_obj = file_data['file']
+                if hasattr(file_obj, 'name') and os.path.exists(file_obj.name):
+                    payloads.append({
+                        'filename': file_data['filename'],
+                        'file_path': file_obj.name,
+                        'text': file_data['text'],
+                        'recipient_email': file_data.get('recipient_email', ''),
+                        'sender_email': file_data.get('sender_email', ''),
+                        'sender_password': file_data.get('sender_password', ''),
+                        'smtp_server': file_data.get('smtp_server', ''),
+                        'smtp_port': file_data.get('smtp_port', 465),
+                        'email_subject': file_data.get('email_subject', ''),
+                        'email_body': file_data.get('email_body', ''),
                     })
-        
-        # Clean up memory after bulk processing
+                else:
+                    # fallback to bytes
+                    file_bytes = file_obj.getvalue() if hasattr(file_obj, 'getvalue') else file_obj.read()
+                    payloads.append({
+                        'filename': file_data['filename'],
+                        'file_content': file_bytes,
+                        'text': file_data['text'],
+                        'recipient_email': file_data.get('recipient_email', ''),
+                        'sender_email': file_data.get('sender_email', ''),
+                        'sender_password': file_data.get('sender_password', ''),
+                        'smtp_server': file_data.get('smtp_server', ''),
+                        'smtp_port': file_data.get('smtp_port', 465),
+                        'email_subject': file_data.get('email_subject', ''),
+                        'email_body': file_data.get('email_body', ''),
+                    })
+
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                future_to_file = {executor.submit(_process_single_resume_worker, p): p['filename'] for p in payloads}
+                for future in concurrent.futures.as_completed(future_to_file):
+                    filename = future_to_file[future]
+                    try:
+                        result = future.result()
+                        if result['success']:
+                            processed_resumes.append(result)
+                        else:
+                            failed_resumes.append(result)
+                        throttled_progress_callback(f"Processed {filename}")
+                        if memory_check():
+                            break
+                    except Exception as e:
+                        failed_resumes.append({'success': False, 'filename': filename, 'error': str(e)})
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_file = {
+                    executor.submit(self.resume_processor.process_single_resume, file_data, throttled_progress_callback):
+                    file_data['filename'] for file_data in optimized_files_data
+                }
+                for future in concurrent.futures.as_completed(future_to_file):
+                    filename = future_to_file[future]
+                    try:
+                        result = future.result()
+                        if result['success']:
+                            processed_resumes.append(result)
+                        else:
+                            failed_resumes.append(result)
+                        throttled_progress_callback(f"Processed {filename}")
+                        if memory_check():
+                            break
+                    except Exception as e:
+                        failed_resumes.append({'success': False, 'filename': filename, 'error': str(e)})
+
         self.file_processor.cleanup_memory()
-        
         return processed_resumes, failed_resumes
     
     def send_batch_emails(
@@ -402,6 +732,9 @@ class PreviewGenerator:
 
 
 class ResumeManager:
+    def process_all_resumes(self, files: List[Any]) -> List[Dict[str, Any]]:
+        """Process all resumes for bulk preview/generation (no email)."""
+        return self.resume_processor.process_all_resumes(files)
     """Main manager class that coordinates all resume processing operations."""
     
     def __init__(self):

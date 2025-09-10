@@ -20,7 +20,9 @@ def check_file_readiness(uploaded_files) -> Tuple[List[str], List[str]]:
             if not hasattr(file, 'name'):
                 logger.warning(f"File object missing name attribute: {file}")
                 continue
-                
+            # Defensive: check for resume_inputs existence
+            if 'resume_inputs' not in st.session_state:
+                st.session_state['resume_inputs'] = {}
             data = st.session_state.resume_inputs.get(file.name, {})
             if data.get('text', '').strip():
                 ready_files.append(file.name)
@@ -45,7 +47,8 @@ def prepare_bulk_data(uploaded_files, ready_files) -> List[Dict[str, Any]]:
             if not hasattr(file, 'name'):
                 logger.warning(f"File object missing name attribute: {file}")
                 continue
-                
+            if 'resume_inputs' not in st.session_state:
+                st.session_state['resume_inputs'] = {}
             if file.name in ready_files:
                 data = st.session_state.resume_inputs.get(file.name, {})
                 files_data.append({

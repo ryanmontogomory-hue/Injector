@@ -106,6 +106,62 @@ class RequirementsManager:
     def list_requirements(self) -> List[Dict[str, Any]]:
         """List all requirements."""
         return list(self.requirements.values())
+    
+    def export_requirements(self) -> str:
+        """Export all requirements as JSON string."""
+        try:
+            import json
+            export_data = {
+                'requirements': self.requirements,
+                'exported_at': datetime.now().isoformat(),
+                'version': '1.0'
+            }
+            return json.dumps(export_data, indent=2)
+        except Exception as e:
+            logger.error(f"Error exporting requirements: {e}")
+            return ""
+    
+    def import_requirements(self, json_data: str, merge: bool = False) -> bool:
+        """Import requirements from JSON string.
+        
+        Args:
+            json_data: JSON string containing requirements data
+            merge: If True, merge with existing data; if False, replace all
+            
+        Returns:
+            True if import successful, False otherwise
+        """
+        try:
+            import json
+            data = json.loads(json_data)
+            
+            if 'requirements' not in data:
+                logger.error("Invalid import data: missing 'requirements' key")
+                return False
+            
+            imported_requirements = data['requirements']
+            
+            if not merge:
+                # Replace all requirements
+                self.requirements = imported_requirements
+            else:
+                # Merge with existing requirements
+                for req_id, req_data in imported_requirements.items():
+                    # Update timestamp to show it was imported
+                    req_data['updated_at'] = datetime.now().isoformat()
+                    req_data['imported'] = True
+                    self.requirements[req_id] = req_data
+            
+            self._save_requirements()
+            logger.info(f"Successfully imported {len(imported_requirements)} requirements")
+            return True
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON format: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error importing requirements: {e}")
+            return False
 
 
 def render_requirement_form(requirement_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -320,6 +376,49 @@ def render_requirements_list(requirements_manager: RequirementsManager):
     if not requirements:
         st.info("No requirements found. Create one using the form above.")
         return
+    
+    # Export/Import functionality
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("📄 Export All"):
+            export_data = requirements_manager.export_requirements()
+            if export_data:
+                st.download_button(
+                    label="💾 Download Requirements",
+                    data=export_data,
+                    file_name=f"requirements_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    help="Download all requirements as JSON file"
+                )
+                st.success("Requirements exported successfully!")
+            else:
+                st.error("Failed to export requirements")
+    
+    with col2:
+        uploaded_file = st.file_uploader(
+            "Import Requirements",
+            type=["json"],
+            help="Upload a JSON file containing requirements data",
+            key="import_requirements"
+        )
+        
+        if uploaded_file:
+            import_data = uploaded_file.read().decode('utf-8')
+            merge_option = st.checkbox("Merge with existing (otherwise replace all)", value=True)
+            
+            if st.button("📅 Import Requirements"):
+                success = requirements_manager.import_requirements(import_data, merge=merge_option)
+                if success:
+                    st.success("Requirements imported successfully!")
+                    st.experimental_rerun()
+                else:
+                    st.error("Failed to import requirements. Please check the file format.")
+    
+    with col3:
+        st.info(f"📊 Total Requirements: {len(requirements)}")
+    
+    st.markdown("---")
     
     # Sort requirements by creation date (newest first)
     requirements.sort(key=lambda x: x.get('created_at', ''), reverse=True)

@@ -18,6 +18,7 @@ except ImportError:
     MAGIC_AVAILABLE = False
 
 from logger import get_logger
+from security_enhancements import InputSanitizer
 
 logger = get_logger()
 
@@ -46,6 +47,7 @@ class FileValidator:
     
     def __init__(self):
         self.total_uploaded_size = 0
+        self.sanitizer = InputSanitizer()
     
     def validate_file(self, file_obj) -> Dict[str, Any]:
         """
@@ -66,11 +68,26 @@ class FileValidator:
         
         try:
             # Basic file info
-            file_size = len(file_obj.getvalue()) if hasattr(file_obj, 'getvalue') else file_obj.size
+            if hasattr(file_obj, 'getvalue'):
+                file_size = len(file_obj.getvalue())
+            elif hasattr(file_obj, 'size'):
+                file_size = file_obj.size
+            elif hasattr(file_obj, 'read'):
+                # Try to read and get length, then reset pointer
+                pos = file_obj.tell() if hasattr(file_obj, 'tell') else None
+                file_content = file_obj.read()
+                file_size = len(file_content)
+                if hasattr(file_obj, 'seek') and pos is not None:
+                    file_obj.seek(pos)
+            else:
+                file_size = 0
             file_name = getattr(file_obj, 'name', 'unknown')
-            
+            # Sanitize filename for security
+            clean_file_name = self.sanitizer.sanitize_filename(file_name)
+
             result['file_info'] = {
-                'name': file_name,
+                'name': clean_file_name,
+                'original_name': file_name,
                 'size': file_size,
                 'size_mb': round(file_size / (1024 * 1024), 2)
             }
@@ -79,7 +96,7 @@ class FileValidator:
             if file_size > self.MAX_FILE_SIZE:
                 result['valid'] = False
                 result['errors'].append(
-                    f"File '{file_name}' is too large ({result['file_info']['size_mb']}MB). "
+                    f"File '{clean_file_name}' is too large ({result['file_info']['size_mb']}MB). "
                     f"Maximum allowed: {self.MAX_FILE_SIZE // (1024 * 1024)}MB"
                 )
             
@@ -112,24 +129,21 @@ class FileValidator:
                 try:
                     file_content = file_obj.getvalue() if hasattr(file_obj, 'getvalue') else file_obj.read()
                     mime_type = magic.from_buffer(file_content, mime=True)
-                    
                     if mime_type not in self.ALLOWED_MIME_TYPES:
                         result['warnings'].append(
                             f"File '{file_name}' MIME type '{mime_type}' may not be supported"
                         )
-                    
                     # Reset file pointer if possible
                     if hasattr(file_obj, 'seek'):
                         file_obj.seek(0)
-                        
                 except Exception as e:
                     logger.warning(f"Could not validate MIME type for {file_name}: {str(e)}")
                     result['warnings'].append("Could not verify file type")
             else:
-                # Fallback validation using file signature (magic bytes)
+                # Only warn if python-magic is actually not available
+                result['warnings'].append("File type validation is less robust because 'python-magic' is not installed. Please install it for better security.")
                 try:
                     file_content = file_obj.getvalue() if hasattr(file_obj, 'getvalue') else file_obj.read()
-                    
                     # Check for DOCX signature (PK header + specific content)
                     if len(file_content) >= 4:
                         # DOCX files start with PK (ZIP signature)
@@ -142,25 +156,20 @@ class FileValidator:
                                 b'_rels/.rels',
                                 b'word/document.xml'
                             ]
-                            
                             # Check in larger portion of file for DOCX structure
                             search_content = file_content[:4096]  # Search first 4KB
                             has_docx_structure = any(indicator in search_content for indicator in docx_indicators)
-                            
                             if has_docx_structure:
                                 logger.debug(f"File '{file_name}' appears to be a valid DOCX file")
                             else:
-                                # This is just a warning, not an error - file might still work
                                 logger.info(f"File '{file_name}' has ZIP structure but DOCX indicators not found in header - attempting to process anyway")
                         else:
                             result['warnings'].append(
                                 f"File '{file_name}' does not appear to be a DOCX file (missing ZIP signature)"
                             )
-                    
                     # Reset file pointer if possible
                     if hasattr(file_obj, 'seek'):
                         file_obj.seek(0)
-                        
                 except Exception as e:
                     logger.warning(f"Could not validate file signature for {file_name}: {str(e)}")
                     result['warnings'].append("Could not verify file type (python-magic not available)")
@@ -169,8 +178,12 @@ class FileValidator:
             if file_size == 0:
                 result['valid'] = False
                 result['errors'].append(f"File '{file_name}' is empty")
+            elif file_size < 100:  # Very small files might be corrupt
+                result['warnings'].append(f"File '{file_name}' is very small ({file_size} bytes) - may be corrupt")
             
-            logger.info(f"File validation for '{file_name}': {'PASSED' if result['valid'] else 'FAILED'}")
+            # Log validation result without sensitive data
+            status = 'PASSED' if result['valid'] else 'FAILED'
+            logger.info(f"File validation for '{file_name}': {status} (size: {result['file_info']['size_mb']}MB)")
             
         except Exception as e:
             result['valid'] = False
