@@ -28,6 +28,9 @@ from ui.bulk_processor import BulkProcessor
 from ui.requirements_manager import RequirementsManager, render_requirement_form, render_requirements_list
 from ui.utils import check_file_readiness, prepare_bulk_data
 
+# Import application guide
+from application_guide import app_guide
+
 # Import async processing components
 from async_integration import (
     initialize_async_services,
@@ -265,6 +268,7 @@ def main():
         "📄 Resume Customizer", 
         "📤 Bulk Processor", 
         "📋 Requirements",
+        "📚 Know About The Application",
         "⚙️ Settings"
     ]
     if st.session_state.get('show_preview_all_tab') and st.session_state.get('all_resume_previews'):
@@ -280,6 +284,8 @@ def main():
     tab_bulk = tabs[tab_idx]
     tab_idx += 1
     tab_requirements = tabs[tab_idx]
+    tab_idx += 1
+    tab_application_guide = tabs[tab_idx]
     tab_idx += 1
     tab_settings = tabs[tab_idx]
 
@@ -400,6 +406,10 @@ def main():
             logger.warning(f"Enhanced requirements features not available: {e}")
             # Fallback to basic requirements tab
             render_requirements_tab()
+
+    with tab_application_guide:
+        # Application Guide Tab
+        app_guide.render_main_tab()
 
     with tab_settings:
         # Settings Tab
