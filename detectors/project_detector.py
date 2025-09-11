@@ -186,3 +186,5 @@ class ProjectDetector:
         # Check if second part looks like a date range
         date_part = parts[1].strip()
         return any(sep in date_part for sep in ['-', '–', '—', 'to', 'present'])
+
+

@@ -122,3 +122,5 @@ class ListFormatterMixin:
         except Exception as e:
             # Log the error but don't fail the operation
             pass
+
+

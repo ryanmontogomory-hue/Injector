@@ -185,7 +185,7 @@ def test_email_handler_integration():
     
     try:
         # Check if email handler imports security modules
-        from email_handler import EmailSender, SMTPConnectionPool
+        from core.email_handler import EmailSender, SMTPConnectionPool
         
         pool = SMTPConnectionPool()
         sender = EmailSender(pool)
@@ -306,3 +306,6 @@ if __name__ == "__main__":
     # Exit with appropriate code
     exit_code = 0 if all(results.values()) else 1
     sys.exit(exit_code)
+
+
+

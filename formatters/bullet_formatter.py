@@ -311,3 +311,5 @@ class BulletFormatter(DocumentFormatter, ListFormatterMixin):
             # Last resort: just add the text as-is
             paragraph.clear()
             paragraph.add_run(text)
+
+

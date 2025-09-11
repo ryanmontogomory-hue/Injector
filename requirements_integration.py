@@ -10,8 +10,8 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from ui.requirements_manager import RequirementsManager
-from logger import get_logger
-from text_parser import parse_input_text
+from utilities.logger import get_logger
+from core.text_parser import parse_input_text
 
 logger = get_logger()
 
@@ -442,3 +442,5 @@ def render_smart_customization_panel():
                     st.success("✅ Tech stack input generated! Copy and paste this into the Resume Customizer tab.")
                 else:
                     st.warning("Could not generate optimized input for this requirement.")
+
+

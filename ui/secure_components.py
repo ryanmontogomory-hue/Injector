@@ -13,7 +13,7 @@ from security_enhancements import (
     SessionSecurityManager,
     rate_limit
 )
-from logger import get_logger
+from utilities.logger import get_logger
 
 logger = get_logger()
 
@@ -302,3 +302,6 @@ def get_secure_ui_components() -> SecureUIComponents:
     if _secure_ui_components is None:
         _secure_ui_components = SecureUIComponents()
     return _secure_ui_components
+
+
+

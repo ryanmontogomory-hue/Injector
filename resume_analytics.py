@@ -500,3 +500,5 @@ def get_optimization_suggester() -> OptimizationSuggester:
     if _optimization_suggester is None:
         _optimization_suggester = OptimizationSuggester()
     return _optimization_suggester
+
+

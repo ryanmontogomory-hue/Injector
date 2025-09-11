@@ -1,8 +1,8 @@
 import streamlit as st
 from config import UI_CONFIG, get_smtp_servers, get_default_email_subject, get_default_email_body, get_app_config
-from validators import get_file_validator, EmailValidator, TextValidator
-from text_parser import LegacyParser
-from logger import get_logger
+from utilities.validators import get_file_validator, EmailValidator, TextValidator
+from core.text_parser import LegacyParser
+from utilities.logger import get_logger
 from security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
 
 file_validator = get_file_validator()
@@ -210,3 +210,6 @@ def admin_resource_panel():
             st.error("⚠️ High resource usage! Consider scaling up workers or hardware.")
     except Exception as e:
         st.error(f"Failed to load resource stats: {e}")
+
+
+

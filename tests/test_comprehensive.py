@@ -15,10 +15,10 @@ sys.path.append('..')
 
 # Import modules to test
 from config import validate_config, APP_CONFIG
-from text_parser import TechStackParser
-from validators import FileValidator, EmailValidator
-from error_handling_enhanced import ErrorHandler, ErrorContext, ErrorSeverity
-from memory_optimizer import MemoryOptimizer, MemoryMonitor
+from core.text_parser import TechStackParser
+from utilities.validators import FileValidator, EmailValidator
+from enhancements.error_handling_enhanced import ErrorHandler, ErrorContext, ErrorSeverity
+from utilities.memory_optimizer import MemoryOptimizer, MemoryMonitor
 from security_enhancements import SecurePasswordManager, InputSanitizer, RateLimiter
 
 
@@ -430,3 +430,5 @@ def mock_streamlit():
 if __name__ == "__main__":
     # Run tests if executed directly
     pytest.main([__file__, "-v"])
+
+

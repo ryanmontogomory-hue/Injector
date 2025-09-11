@@ -118,7 +118,7 @@ def benchmark_async_task_queue(documents: List[Dict[str, Any]]) -> Dict[str, Any
     print(f"🚀 Running AsyncTaskQueue processing for {len(documents)} documents...")
     
     try:
-        from async_processor import AsyncTaskQueue
+        from core.async_processor import AsyncTaskQueue
         
         start_time = time.time()
         task_queue = AsyncTaskQueue(max_workers=6)
@@ -290,3 +290,6 @@ def main():
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)
+
+
+

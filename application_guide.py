@@ -1445,3 +1445,5 @@ experience in [market/domain].
 
 # Create singleton instance
 app_guide = ApplicationGuide()
+
+

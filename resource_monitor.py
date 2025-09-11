@@ -26,3 +26,5 @@ def monitor_loop(interval=10):
         stats = get_resource_stats()
         print(f"[MONITOR] CPU: {stats['cpu_percent']}% | MEM: {stats['mem_percent']}% | Celery Q: {stats['celery_queue_length']}")
         time.sleep(interval)
+
+

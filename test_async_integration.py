@@ -11,7 +11,7 @@ def test_async_imports():
     print("Testing async module imports...")
     
     try:
-        from async_processor import (
+        from core.async_processor import (
             get_async_doc_processor,
             get_async_file_processor,
             get_background_task_manager,
@@ -45,7 +45,7 @@ def test_async_task_queue():
     print("\nTesting AsyncTaskQueue...")
     
     try:
-        from async_processor import AsyncTaskQueue
+        from core.async_processor import AsyncTaskQueue
         
         # Create a task queue
         queue = AsyncTaskQueue(max_workers=2)
@@ -87,7 +87,7 @@ def test_async_document_processor():
     print("\nTesting AsyncDocumentProcessor...")
     
     try:
-        from async_processor import get_async_doc_processor
+        from core.async_processor import get_async_doc_processor
         
         processor = get_async_doc_processor()
         
@@ -143,7 +143,7 @@ def test_background_task_manager():
     print("\nTesting BackgroundTaskManager...")
     
     try:
-        from async_processor import get_background_task_manager
+        from core.async_processor import get_background_task_manager
         
         manager = get_background_task_manager()
         
@@ -246,3 +246,6 @@ def main():
 if __name__ == "__main__":
     exit_code = main()
     sys.exit(exit_code)
+
+
+

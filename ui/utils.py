@@ -3,7 +3,7 @@ Utility functions for bulk processing checks and data preparation.
 """
 import streamlit as st
 from typing import List, Tuple, Dict, Any
-from logger import get_logger
+from utilities.logger import get_logger
 
 logger = get_logger()
 
@@ -70,3 +70,5 @@ def prepare_bulk_data(uploaded_files, ready_files) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error preparing bulk data: {e}")
         return []
+
+

@@ -119,24 +119,65 @@ AWS: • Deployed applications using EC2 and S3 • Managed databases with RDS
 ```
 resume-customizer/
 ├── app.py                          # Main Streamlit application
-├── app_refactored.py               # Refactored modular version
+├── config.py                       # Configuration module  
 ├── requirements.txt                # Python dependencies
-├── config.py                       # Configuration module
-├── text_parser.py                  # Text parsing functionality
-├── document_processor.py           # Document processing module
-├── email_handler.py                # Email operations module
-├── resume_processor.py             # Resume processing coordination
-├── DEPLOYMENT.md                   # Comprehensive deployment guide
-├── README.md                       # This file
-├── README_REFACTORED.md            # Refactored architecture documentation
-├── .streamlit/
-│   ├── config.toml                 # Streamlit configuration
-│   └── secrets.toml.example        # Secrets template
-├── .env.example                    # Environment variables template
-├── .gitignore                      # Git ignore rules
-├── email_analysis.py               # Email functionality analysis
-├── email_status_report.md          # Email feature documentation
-└── test_email.py                   # Email testing utilities
+├── README.md                       # This documentation
+├── 
+├── 📁 core/                        # Core application modules
+│   ├── __init__.py
+│   ├── resume_processor.py         # Resume processing coordination
+│   ├── email_handler.py            # Email operations module
+│   ├── document_processor.py       # Document processing module
+│   ├── text_parser.py              # Text parsing functionality
+│   ├── async_processor.py          # Async processing
+│   └── async_integration.py        # Async integration
+│
+├── 📁 enhancements/                # Enhanced feature modules
+│   ├── __init__.py
+│   ├── metrics_analytics_enhanced.py
+│   ├── health_monitor_enhanced.py
+│   ├── email_templates_enhanced.py
+│   ├── enhanced_error_recovery.py
+│   ├── batch_processor_enhanced.py
+│   ├── progress_tracker_enhanced.py
+│   └── error_handling_enhanced.py
+│
+├── 📁 monitoring/                  # Performance & monitoring
+│   ├── __init__.py
+│   ├── performance_monitor.py
+│   ├── circuit_breaker.py
+│   ├── distributed_cache.py
+│   └── performance_cache.py
+│
+├── 📁 utilities/                   # Helper utilities
+│   ├── __init__.py
+│   ├── logger.py
+│   ├── validators.py
+│   ├── memory_optimizer.py
+│   ├── structured_logger.py
+│   ├── lazy_imports.py
+│   └── retry_handler.py
+│
+├── 📁 database/                    # Database modules
+│   ├── __init__.py
+│   ├── models.py
+│   ├── connection.py
+│   └── migrations.py
+│
+├── 📁 ui/                          # User interface components
+│   ├── __init__.py
+│   ├── components.py
+│   ├── bulk_processor.py
+│   ├── resume_tab_handler.py
+│   └── requirements_manager.py
+│
+├── 📁 templates/                   # Resume templates
+├── 📁 tests/                       # Test files
+├── 📁 processors/                  # Document processors
+├── 📁 formatters/                  # Formatting utilities
+├── 📁 detectors/                   # Detection modules
+└── 📁 .streamlit/                  # Streamlit configuration
+    └── config.toml
 ```
 
 ## 🔒 Security

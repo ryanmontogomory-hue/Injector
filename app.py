@@ -12,13 +12,13 @@ from typing import Dict, Any, Optional
 
 # Import custom modules
 from config import get_app_config, get_smtp_servers, get_default_email_subject, get_default_email_body, APP_CONFIG, validate_config
-from text_parser import parse_input_text, LegacyParser
-from resume_processor import get_resume_manager
-from email_handler import get_email_manager
-from logger import get_logger, display_logs_in_sidebar
-from validators import validate_session_state
-from performance_monitor import get_performance_monitor
-from retry_handler import get_retry_handler
+from core.text_parser import parse_input_text, LegacyParser
+from core.resume_processor import get_resume_manager
+from core.email_handler import get_email_manager
+from utilities.logger import get_logger, display_logs_in_sidebar
+from utilities.validators import validate_session_state
+from monitoring.performance_monitor import get_performance_monitor
+from utilities.retry_handler import get_retry_handler
 
 # Import refactored UI and handlers
 from ui.components import UIComponents
@@ -32,7 +32,7 @@ from ui.utils import check_file_readiness, prepare_bulk_data
 from application_guide import app_guide
 
 # Import async processing components
-from async_integration import (
+from core.async_integration import (
     initialize_async_services,
     process_documents_async,
     get_async_results,
@@ -41,7 +41,7 @@ from async_integration import (
 )
 
 # Import reliability and error handling
-from error_handling_enhanced import (
+from enhancements.error_handling_enhanced import (
     ErrorHandler, 
     ErrorContext, 
     ErrorSeverity,
@@ -50,14 +50,14 @@ from error_handling_enhanced import (
 )
 
 # Import memory optimization
-from memory_optimizer import (
+from utilities.memory_optimizer import (
     get_memory_optimizer,
     with_memory_management,
     memory_efficient_batch
 )
 
 # Import structured logging
-from structured_logger import (
+from utilities.structured_logger import (
     get_structured_logger,
     with_structured_logging,
     log_performance,
@@ -68,7 +68,7 @@ from structured_logger import (
 logger = get_logger()
 performance_monitor = get_performance_monitor()
 memory_optimizer = get_memory_optimizer()
-resume_manager = get_resume_manager()
+# Resume manager will be initialized when needed to avoid caching issues
 email_manager = get_email_manager()
 config = get_app_config()
 
@@ -140,51 +140,69 @@ def check_application_health() -> Dict[str, Any]:
 
 def render_requirements_tab():
     """Render the Requirements Management tab."""
-    st.title("📋 Requirements Manager")
-    st.write("Create and manage job requirements to customize your resume for specific positions.")
-    
-    # Initialize requirements manager
-    if 'requirements_manager' not in st.session_state:
-        st.session_state.requirements_manager = RequirementsManager()
-    
-    # Tabs for different views
-    tab1, tab2 = st.tabs(["📝 Create/Edit Requirement", "📋 View Requirements"])
-    
-    with tab1:
-        # Check if we're editing an existing requirement
-        edit_id = st.query_params.get("edit")
-        requirement_to_edit = None
+    try:
+        st.title("📋 Requirements Manager")
+        st.write("Create and manage job requirements to customize your resume for specific positions.")
         
-        if edit_id and 'requirements_manager' in st.session_state:
-            requirement_to_edit = st.session_state.requirements_manager.get_requirement(edit_id)
-            if not requirement_to_edit:
-                st.warning("The requirement you're trying to edit doesn't exist.")
+        # Initialize requirements manager
+        if 'requirements_manager' not in st.session_state:
+            st.session_state.requirements_manager = RequirementsManager()
         
-        # Render the form
-        form_data = render_requirement_form(requirement_to_edit)
+        logger.info("Requirements tab rendered successfully")
         
-        # Handle form submission
-        if form_data:
-            try:
-                if requirement_to_edit:
-                    # Update existing requirement
-                    if st.session_state.requirements_manager.update_requirement(edit_id, form_data):
-                        st.success("✅ Requirement updated successfully!")
-                        st.rerun()
+        # Tabs for different views
+        tab1, tab2 = st.tabs(["📝 Create/Edit Requirement", "📋 View Requirements"])
+        
+        with tab1:
+            # Check if we're editing an existing requirement
+            edit_id = st.query_params.get("edit")
+            requirement_to_edit = None
+            
+            if edit_id and 'requirements_manager' in st.session_state:
+                requirement_to_edit = st.session_state.requirements_manager.get_requirement(edit_id)
+                if not requirement_to_edit:
+                    st.warning("The requirement you're trying to edit doesn't exist.")
+            
+            # Render the form
+            form_data = render_requirement_form(requirement_to_edit)
+            
+            # Handle form submission
+            if form_data:
+                try:
+                    if requirement_to_edit:
+                        # Update existing requirement
+                        if st.session_state.requirements_manager.update_requirement(edit_id, form_data):
+                            st.success("✅ Requirement updated successfully!")
+                            # Don't use st.rerun() to prevent tab switching, just show success message
+                        else:
+                            st.error("Failed to update requirement. It may have been deleted.")
                     else:
-                        st.error("Failed to update requirement. It may have been deleted.")
-                else:
-                    # Create new requirement
-                    requirement_id = st.session_state.requirements_manager.create_requirement(form_data)
-                    if requirement_id:
-                        st.success("✅ Requirement created successfully!")
-                        st.rerun()
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
-                logger.error(f"Error saving requirement: {str(e)}")
-    
-    with tab2:
-        render_requirements_list(st.session_state.requirements_manager)
+                        # Create new requirement
+                        requirement_id = st.session_state.requirements_manager.create_requirement(form_data)
+                        if requirement_id:
+                            st.success("✅ Requirement created successfully!")
+                            st.info(f"📝 Requirement ID: {requirement_id}")
+                            # Don't use st.rerun() to prevent tab switching
+                        else:
+                            st.error("Failed to create requirement. Please try again.")
+                except Exception as e:
+                    st.error(f"An error occurred: {str(e)}")
+                    logger.error(f"Error saving requirement: {str(e)}")
+                    # Add more detailed error information for debugging
+                    import traceback
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        with tab2:
+            render_requirements_list(st.session_state.requirements_manager)
+            
+    except Exception as e:
+        st.error(f"An error occurred in the Requirements tab: {str(e)}")
+        logger.error(f"Requirements tab error: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Provide fallback functionality
+        st.info("There was an error loading the requirements manager. Please refresh the page.")
 
 @handle_errors("main_application", ErrorSeverity.CRITICAL, show_to_user=True)
 def main():
@@ -199,7 +217,7 @@ def main():
     
     # Preload essential modules for better performance
     try:
-        from lazy_imports import preload_essential_modules, get_lazy_module_stats
+        from utilities.lazy_imports import preload_essential_modules, get_lazy_module_stats
         preload_essential_modules()
     except ImportError:
         pass  # Lazy loading system not available
@@ -221,14 +239,21 @@ def main():
             st.error(issue)
         return
     
-    # Initialize session state
-    if 'resume_tab_handler' not in st.session_state:
-        from resume_processor import get_resume_manager
-        st.session_state.resume_tab_handler = ResumeTabHandler(resume_manager=get_resume_manager())
+    # Initialize session state with fresh manager instances
+    # Force refresh if version changed or handlers missing async methods
+    force_refresh = False
+    if 'resume_tab_handler' in st.session_state:
+        handler = st.session_state.resume_tab_handler
+        if not hasattr(handler.resume_manager, 'process_single_resume_async'):
+            force_refresh = True
     
-    if 'bulk_processor' not in st.session_state:
-        from resume_processor import get_resume_manager
-        st.session_state.bulk_processor = BulkProcessor(resume_manager=get_resume_manager())
+    if 'resume_tab_handler' not in st.session_state or force_refresh:
+        from core.resume_processor import get_resume_manager
+        st.session_state.resume_tab_handler = ResumeTabHandler(resume_manager=get_resume_manager("v2.2"))
+    
+    if 'bulk_processor' not in st.session_state or force_refresh:
+        from core.resume_processor import get_resume_manager
+        st.session_state.bulk_processor = BulkProcessor(resume_manager=get_resume_manager("v2.2"))
     
 
     # Validate configuration first
@@ -256,8 +281,9 @@ def main():
 
     ui = UIComponents()
     secure_ui = get_secure_ui_components()
-    tab_handler = ResumeTabHandler(resume_manager)
-    bulk_processor = BulkProcessor(resume_manager)
+    # Use session state handlers to ensure consistency
+    tab_handler = st.session_state.resume_tab_handler
+    bulk_processor = st.session_state.bulk_processor
 
     # Main app layout
     st.title(APP_CONFIG["title"])
@@ -423,7 +449,7 @@ def main():
             
             # Cache statistics
             try:
-                from performance_cache import get_cache_manager
+                from monitoring.performance_cache import get_cache_manager
                 cache_manager = get_cache_manager()
                 st.markdown("**Cache Performance:**")
                 col1, col2, col3 = st.columns(3)
@@ -448,7 +474,7 @@ def main():
                     
                     # Also clear lazy import cache if available
                     try:
-                        from lazy_imports import clear_lazy_cache
+                        from utilities.lazy_imports import clear_lazy_cache
                         clear_lazy_cache()
                         st.info("Lazy import cache cleared")
                     except ImportError:
@@ -489,7 +515,7 @@ def main():
                     
                 # Show lazy loading stats if available
                 try:
-                    from lazy_imports import get_lazy_module_stats
+                    from utilities.lazy_imports import get_lazy_module_stats
                     lazy_stats = get_lazy_module_stats()
                     if lazy_stats['loaded_count'] > 0:
                         st.markdown("**Lazy Loading:**")
@@ -538,11 +564,11 @@ def cleanup_on_exit():
     """Cleanup resources on application exit."""
     try:
         # Cleanup performance monitor
-        from performance_monitor import cleanup_performance_monitor
+        from monitoring.performance_monitor import cleanup_performance_monitor
         cleanup_performance_monitor()
         
         # Cleanup document resources
-        from document_processor import cleanup_document_resources
+        from core.document_processor import cleanup_document_resources
         cleanup_document_resources()
         
         # Cleanup email connections
@@ -557,3 +583,5 @@ if __name__ == "__main__":
         main()
     finally:
         cleanup_on_exit()
+
+
