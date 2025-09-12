@@ -84,7 +84,7 @@ def show_celery_status():
     """Show Celery configuration status."""
     print("\n📋 Celery Configuration Status:")
     try:
-        from celeryconfig import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+        from config.celeryconfig import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
         print(f"  Broker: {CELERY_BROKER_URL}")
         print(f"  Backend: {CELERY_RESULT_BACKEND}")
         

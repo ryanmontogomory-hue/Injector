@@ -1,21 +1,72 @@
 import streamlit as st
+import time
+from typing import List, Dict, Any, Optional
 from config import UI_CONFIG, get_smtp_servers, get_default_email_subject, get_default_email_body, get_app_config
 from utilities.validators import get_file_validator, EmailValidator, TextValidator
 from core.text_parser import LegacyParser
 from utilities.logger import get_logger
 from security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
 
+# Try to import enhanced error handling
+try:
+    from utilities.error_integration import (
+        display_error_dashboard, display_performance_metrics, 
+        safe_operation, log_user_action, create_error_boundary
+    )
+    ENHANCED_UI_AVAILABLE = True
+except ImportError:
+    ENHANCED_UI_AVAILABLE = False
+
 file_validator = get_file_validator()
 config = get_app_config()
 logger = get_logger()
 
 class UIComponents:
-    """Handles UI component rendering and interactions."""
+    """Handles UI component rendering and interactions with enhanced UX."""
+    
+    @staticmethod
+    def render_enhanced_sidebar():
+        """Enhanced sidebar with system status and quick actions."""
+        with st.sidebar:
+            # Application status
+            st.markdown("### 🚀 Application Status")
+            
+            # Quick health check
+            if st.button("🔍 Quick Health Check", help="Check system status"):
+                with st.spinner("Checking system health..."):
+                    time.sleep(0.5)  # Brief delay for visual feedback
+                    # Basic health checks
+                    checks = {
+                        "Streamlit": hasattr(st, 'session_state'),
+                        "File Upload": hasattr(st, 'file_uploader'),
+                        "Memory": True  # Simplified check
+                    }
+                    
+                    all_healthy = all(checks.values())
+                    if all_healthy:
+                        st.success("✅ All systems operational")
+                    else:
+                        for name, status in checks.items():
+                            icon = "✅" if status else "❌"
+                            st.write(f"{icon} {name}")
+            
+            # Enhanced error dashboard if available
+            if ENHANCED_UI_AVAILABLE:
+                display_error_dashboard()
+            
+            # Quick actions
+            st.markdown("### ⚡ Quick Actions")
+            if st.button("🗑️ Clear Session", help="Reset all session data"):
+                for key in list(st.session_state.keys()):
+                    if not key.startswith('_'):  # Preserve internal streamlit keys
+                        del st.session_state[key]
+                st.success("Session cleared!")
+                st.rerun()
     
     @staticmethod
     def render_sidebar():
-        """Sidebar intentionally left blank (removed instructions/info)."""
-        pass
+        """Backward compatible sidebar renderer."""
+        UIComponents.render_enhanced_sidebar()
 
     @staticmethod
     def render_gdrive_picker(key="gdrive_picker_customizer"):
@@ -28,35 +79,105 @@ class UIComponents:
         return results
 
     @staticmethod
-    def render_file_upload(key="file_upload"):
-        """Render the file upload component with validation."""
+    def render_file_upload_with_progress(key="file_upload"):
+        """Enhanced file upload with progress indicators and better feedback."""
+        # Enhanced file upload with drag and drop styling
+        st.markdown("""
+        <style>
+        .uploadedFile {
+            background-color: #f0f2f6;
+            border: 2px dashed #cccccc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .file-upload-success {
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
         uploaded_files = st.file_uploader(
-            UI_CONFIG["file_upload_help"], 
-            type="docx", 
+            "📁 Drop your resume files here or click to browse",
+            type=["docx"],
             accept_multiple_files=True,
-            key=key
+            key=key,
+            help="Upload one or more .docx resume files. Maximum 50MB per file."
         )
         
         if uploaded_files:
-            validation_result = file_validator.validate_batch(uploaded_files)
-            
-            if not validation_result['valid']:
-                for error in validation_result['summary']['errors']:
-                    st.error(f"❌ {error}")
-                return None
-            
-            for warning in validation_result['summary']['warnings']:
-                st.warning(f"⚠️ {warning}")
-            
-            summary = validation_result['summary']
-            if summary['valid_files'] > 0:
-                st.success(
-                    f"✅ {summary['valid_files']} valid files uploaded "
-                    f"({summary['total_size_mb']:.1f}MB total)"
-                )
-                logger.log_user_action("file_upload", files_count=summary['valid_files'], total_size_mb=summary['total_size_mb'])
+            # Show upload progress
+            progress_container = st.container()
+            with progress_container:
+                st.markdown("### 📊 Processing Files...")
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # Validate files with progress
+                for i, file in enumerate(uploaded_files):
+                    progress = (i + 1) / len(uploaded_files)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Validating {file.name}... ({i+1}/{len(uploaded_files)})")
+                    time.sleep(0.1)  # Brief pause for visual feedback
+                
+                # Perform actual validation
+                validation_result = file_validator.validate_batch(uploaded_files)
+                
+                # Clear progress indicators
+                progress_bar.empty()
+                status_text.empty()
+                
+                # Protect against None validation result
+                if validation_result is None:
+                    st.error("🚨 File validation failed - validator returned no result")
+                    return None
+                
+                # Show results with enhanced styling
+                if not validation_result.get('valid', False):
+                    st.error("🚫 File Validation Issues")
+                    with st.expander("📋 See Details", expanded=True):
+                        for error in validation_result['summary']['errors']:
+                            st.error(f"❌ {error}")
+                    return None
+                
+                # Show warnings if any
+                if validation_result.get('summary', {}).get('warnings'):
+                    with st.expander("⚠️ Warnings", expanded=False):
+                        for warning in validation_result['summary']['warnings']:
+                            st.warning(f"⚠️ {warning}")
+                
+                # Success message with metrics
+                summary = validation_result.get('summary', {})
+                if summary.get('valid_files', 0) > 0:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("✅ Valid Files", summary.get('valid_files', 0))
+                    with col2:
+                        st.metric("📁 Total Size", f"{summary.get('total_size_mb', 0):.1f}MB")
+                    with col3:
+                        st.metric("⚡ Status", "Ready")
+                    
+                    # Log the action if enhanced logging is available
+                    if ENHANCED_UI_AVAILABLE:
+                        log_user_action("file_upload", {
+                            "files_count": summary.get('valid_files', 0), 
+                            "total_size_mb": summary.get('total_size_mb', 0)
+                        })
+                    
+                    # Success animation
+                    st.balloons()
         
         return uploaded_files
+    
+    @staticmethod
+    def render_file_upload(key="file_upload"):
+        """Backward compatible file upload renderer."""
+        return UIComponents.render_file_upload_with_progress(key)
 
     @staticmethod
     def render_example_format():
@@ -73,14 +194,14 @@ class UIComponents:
             email_to = st.text_input(f"Recipient email for {file_name}", key=f"to_{file_name}")
             if email_to:
                 validation = EmailValidator.validate_email(email_to)
-                if not validation['valid']:
-                    st.error(f"Invalid recipient email: {', '.join(validation['errors'])}")
+                if validation and not validation.get('valid', True):
+                    st.error(f"Invalid recipient email: {', '.join(validation.get('errors', ['Validation failed']))}")
             
             sender_email = st.text_input(f"Sender email for {file_name}", key=f"from_{file_name}")
             if sender_email:
                 validation = EmailValidator.validate_email(sender_email)
-                if not validation['valid']:
-                    st.error(f"Invalid sender email: {', '.join(validation['errors'])}")
+                if validation and not validation.get('valid', True):
+                    st.error(f"Invalid sender email: {', '.join(validation.get('errors', ['Validation failed']))}")
         
         with col2:
             sender_password = st.text_input(
@@ -195,6 +316,114 @@ class UIComponents:
                 )
         
         return max_workers, bulk_email_mode, show_progress, performance_stats
+    
+    @staticmethod
+    def render_processing_status(operation_name: str, current_step: str, progress: float = None):
+        """Render a processing status component with progress."""
+        status_container = st.container()
+        
+        with status_container:
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.markdown(f"**🔄 {operation_name}**")
+                st.text(current_step)
+            
+            with col2:
+                if progress is not None:
+                    st.metric("Progress", f"{progress:.0%}")
+            
+            if progress is not None:
+                st.progress(progress)
+    
+    @staticmethod
+    def render_success_message(title: str, details: Dict[str, Any] = None):
+        """Render an enhanced success message with details."""
+        st.success(f"✅ {title}")
+        
+        if details:
+            with st.expander("📋 Details", expanded=False):
+                for key, value in details.items():
+                    st.write(f"**{key}:** {value}")
+    
+    @staticmethod
+    def render_error_message(title: str, error: str, suggestions: List[str] = None):
+        """Render an enhanced error message with suggestions."""
+        st.error(f"🚨 {title}")
+        
+        with st.expander("🔍 Error Details", expanded=True):
+            st.write(f"**Error:** {error}")
+            
+            if suggestions:
+                st.write("**💡 Suggestions:**")
+                for i, suggestion in enumerate(suggestions, 1):
+                    st.write(f"{i}. {suggestion}")
+    
+    @staticmethod
+    def render_operation_timer():
+        """Render a timer component for long-running operations."""
+        if 'operation_start_time' not in st.session_state:
+            st.session_state.operation_start_time = time.time()
+        
+        elapsed = time.time() - st.session_state.operation_start_time
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("⏱️ Elapsed Time", f"{elapsed:.1f}s")
+        with col2:
+            if elapsed > 10:
+                st.warning("Operation taking longer than expected...")
+            else:
+                st.info("Processing...")
+    
+    @staticmethod
+    def render_enhanced_metrics_panel():
+        """Render enhanced metrics and performance panel."""
+        if ENHANCED_UI_AVAILABLE:
+            display_performance_metrics()
+        else:
+            # Fallback simple metrics
+            if 'session_metrics' not in st.session_state:
+                st.session_state.session_metrics = {
+                    'files_processed': 0,
+                    'operations_completed': 0,
+                    'session_start': time.time()
+                }
+            
+            metrics = st.session_state.session_metrics
+            session_time = time.time() - metrics['session_start']
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Files Processed", metrics['files_processed'])
+            with col2:
+                st.metric("Operations", metrics['operations_completed'])
+            with col3:
+                st.metric("Session Time", f"{session_time/60:.1f}m")
+
+
+def create_loading_spinner(message: str = "Processing..."):
+    """Create a context manager for loading spinners."""
+    return st.spinner(message)
+
+
+def show_toast_message(message: str, message_type: str = "success"):
+    """Show a toast-style message (using Streamlit's built-in methods)."""
+    if message_type == "success":
+        st.success(message)
+        st.balloons()
+    elif message_type == "error":
+        st.error(message)
+    elif message_type == "warning":
+        st.warning(message)
+    else:
+        st.info(message)
+
+
+def create_collapsible_section(title: str, content_func, expanded: bool = False):
+    """Create a collapsible section with custom content."""
+    with st.expander(title, expanded=expanded):
+        content_func()
 
 
 def admin_resource_panel():

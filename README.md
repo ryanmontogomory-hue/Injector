@@ -122,7 +122,15 @@ resume-customizer/
 ├── config.py                       # Configuration module  
 ├── requirements.txt                # Python dependencies
 ├── README.md                       # This documentation
+├── Dockerfile                      # Docker configuration
+├── tasks.py                        # Celery task definitions
 ├── 
+├── 📁 config/                      # Configuration files
+│   ├── celeryconfig.py             # Celery configuration
+│   ├── docker-compose.prod.yml     # Production Docker setup
+│   ├── pytest.ini                 # Test configuration
+│   └── celery.exchange             # Celery queue configuration
+│
 ├── 📁 core/                        # Core application modules
 │   ├── __init__.py
 │   ├── resume_processor.py         # Resume processing coordination
@@ -162,20 +170,58 @@ resume-customizer/
 │   ├── __init__.py
 │   ├── models.py
 │   ├── connection.py
-│   └── migrations.py
+│   ├── migrations.py
+│   ├── migrate_from_json.py
+│   └── requirements_manager_db.py
 │
 ├── 📁 ui/                          # User interface components
 │   ├── __init__.py
 │   ├── components.py
 │   ├── bulk_processor.py
 │   ├── resume_tab_handler.py
-│   └── requirements_manager.py
+│   ├── requirements_manager.py
+│   ├── secure_components.py
+│   ├── gdrive_picker.py
+│   └── utils.py
+│
+├── 📁 processors/                  # Document processors
+│   ├── __init__.py
+│   └── point_distributor.py
+│
+├── 📁 formatters/                  # Formatting utilities
+│   ├── __init__.py
+│   ├── base_formatters.py
+│   └── bullet_formatter.py
+│
+├── 📁 detectors/                   # Detection modules
+│   ├── __init__.py
+│   └── project_detector.py
 │
 ├── 📁 templates/                   # Resume templates
 ├── 📁 tests/                       # Test files
-├── 📁 processors/                  # Document processors
-├── 📁 formatters/                  # Formatting utilities
-├── 📁 detectors/                   # Detection modules
+│   ├── test_comprehensive.py
+│   ├── test_bullet_formatting.py
+│   ├── test_celery_end_to_end.py
+│   ├── test_celery_task.py
+│   ├── test_imports.py
+│   ├── test_real_task.py
+│   ├── test_security_phase1.py
+│   └── performance_benchmark.py
+│
+├── 📁 scripts/                     # Deployment & utility scripts
+│   ├── run_worker.bat              # Windows Celery worker script
+│   ├── start_celery.bat           # Windows Celery startup
+│   ├── start_celery_worker.py     # Python Celery worker
+│   └── setup_database.py          # Database setup script
+│
+├── 📁 docs/                        # Documentation
+│   ├── DATABASE_MIGRATION_GUIDE.md
+│   ├── ENHANCEMENT_SUMMARY.md
+│   ├── PHASE1_USAGE_GUIDE.md
+│   ├── README-celery.md
+│   ├── README-monitoring.md
+│   └── REQUIREMENTS_UPDATE_SUMMARY.md
+│
 └── 📁 .streamlit/                  # Streamlit configuration
     └── config.toml
 ```

@@ -769,8 +769,7 @@ def render_requirements_list(requirements_manager: RequirementsManager):
                 success = requirements_manager.import_requirements(import_data, merge=merge_option)
                 if success:
                     st.success("Requirements imported successfully!")
-                    # Use st.rerun() instead of st.experimental_rerun() and only if necessary
-                    # st.rerun()
+                    st.rerun()
                 else:
                     st.error("Failed to import requirements. Please check the file format.")
     

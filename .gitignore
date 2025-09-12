@@ -107,3 +107,19 @@ ssl/
 # Config files with secrets
 secrets.toml
 .secrets
+
+# Application specific
+logs/
+*.exchange
+control/
+database/*.db
+database/*.sqlite*
+
+# Test outputs
+test_output/
+*_output.docx
+*_test_output.*
+
+# Cache directories
+.cache/
+cache/

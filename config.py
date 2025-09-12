@@ -9,6 +9,17 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote_plus
+import logging
+
+# Try to import python-dotenv for .env file support
+try:
+    from dotenv import load_dotenv
+    _DOTENV_AVAILABLE = True
+except ImportError:
+    _DOTENV_AVAILABLE = False
+    
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -26,6 +37,116 @@ class ConfigValidationResult:
     def add_warning(self, warning: str) -> None:
         """Add a validation warning."""
         self.warnings.append(warning)
+
+
+class EnvironmentConfig:
+    """Environment variable configuration manager."""
+    
+    @staticmethod
+    def load_env_file(env_path: str = ".env") -> bool:
+        """Load environment variables from .env file if available."""
+        if not _DOTENV_AVAILABLE:
+            logger.warning("python-dotenv not available, using system environment variables only")
+            return False
+            
+        env_file = Path(env_path)
+        if env_file.exists():
+            load_dotenv(env_file)
+            logger.info(f"Loaded environment variables from {env_path}")
+            return True
+        else:
+            logger.info(f"No .env file found at {env_path}, using system environment variables")
+            return False
+    
+    @staticmethod
+    def get_env_int(key: str, default: int) -> int:
+        """Get integer value from environment variable."""
+        try:
+            return int(os.getenv(key, default))
+        except (ValueError, TypeError):
+            return default
+    
+    @staticmethod
+    def get_env_bool(key: str, default: bool) -> bool:
+        """Get boolean value from environment variable."""
+        value = os.getenv(key, str(default)).lower()
+        return value in ('true', '1', 'yes', 'on')
+    
+    @staticmethod
+    def get_env_list(key: str, default: List[str], separator: str = ',') -> List[str]:
+        """Get list value from environment variable."""
+        value = os.getenv(key)
+        if value:
+            return [item.strip() for item in value.split(separator) if item.strip()]
+        return default
+    
+    @staticmethod
+    def create_env_template(file_path: str = ".env.template") -> bool:
+        """Create a template .env file with all configuration variables."""
+        try:
+            template_content = '''# Resume Customizer Configuration
+# Copy this to .env and modify values as needed
+
+# Application Settings
+APP_TITLE="📝 Resume Customizer + Email Sender"
+APP_PAGE_TITLE="Resume Customizer"
+APP_LAYOUT=wide
+APP_VERSION=2.1.0
+APP_MAX_WORKERS_DEFAULT=4
+APP_MAX_WORKERS_LIMIT=8
+APP_BULK_MODE_THRESHOLD=3
+
+# Environment Settings
+ENVIRONMENT=development
+DEBUG=false
+LOG_LEVEL=INFO
+
+# Email Configuration (Optional - can be set in UI)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_USE_TLS=true
+
+# Security Settings
+SECRET_KEY=your-secret-key-here
+ENCRYPTION_KEY=your-encryption-key-here
+
+# Redis Configuration (Optional - for caching)
+REDIS_URL=redis://localhost:6379/0
+REDIS_MAX_CONNECTIONS=10
+REDIS_TIMEOUT=30
+
+# Performance Settings
+CACHE_TTL=3600
+MEMORY_CLEANUP_THRESHOLD=10
+CONNECTION_POOL_TIMEOUT=30
+
+# File Processing Settings
+MAX_FILE_SIZE_MB=50
+MAX_PROJECTS_ENHANCED=3
+DEFAULT_BULLET_MARKERS="-,•,*"
+
+# UI Settings
+SIDEBAR_EXPANDED=true
+SHOW_PERFORMANCE_METRICS=true
+ENABLE_PREVIEW_MODE=true
+
+# Monitoring Settings
+ENABLE_HEALTH_CHECK=true
+HEALTH_CHECK_INTERVAL=300
+ENABLE_METRICS_COLLECTION=true
+'''
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(template_content)
+            
+            logger.info(f"✅ Environment template created: {file_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to create environment template: {e}")
+            return False
 
 
 class ConfigValidator:
@@ -55,35 +176,69 @@ class ConfigValidator:
         return None
 
 
-# Application Configuration
-APP_CONFIG = {
-    "title": "📝 Resume Customizer + Email Sender",
-    "page_title": "Resume Customizer",
-    "layout": "wide",
-    "max_workers_default": 4,
-    "max_workers_limit": 8,
-    "bulk_mode_threshold": 3,
-    "version": "2.1.0",
-    "build_date": "2024-01-15",
-    "author": "Resume Customizer Team",
-}
+# Initialize environment configuration
+env_config = EnvironmentConfig()
+env_config.load_env_file()  # Try to load .env file
 
-# SMTP Configuration
-SMTP_SERVERS = {
-    "Gmail": {"server": "smtp.gmail.com", "port": 465},
-    "Office365": {"server": "smtp.office365.com", "port": 587},
-    "Yahoo": {"server": "smtp.mail.yahoo.com", "port": 465},
-    "Custom": {"server": "Custom", "port": 587}
-}
+# Application Configuration with Environment Variable Support
+def _get_app_config() -> Dict[str, Any]:
+    """Get application configuration with environment variable overrides."""
+    return {
+        "title": os.getenv("APP_TITLE", "📝 Resume Customizer + Email Sender"),
+        "page_title": os.getenv("APP_PAGE_TITLE", "Resume Customizer"),
+        "layout": os.getenv("APP_LAYOUT", "wide"),
+        "max_workers_default": env_config.get_env_int("APP_MAX_WORKERS_DEFAULT", 4),
+        "max_workers_limit": env_config.get_env_int("APP_MAX_WORKERS_LIMIT", 8),
+        "bulk_mode_threshold": env_config.get_env_int("APP_BULK_MODE_THRESHOLD", 3),
+        "version": os.getenv("APP_VERSION", "2.1.0"),
+        "build_date": os.getenv("BUILD_DATE", "2024-01-15"),
+        "author": os.getenv("APP_AUTHOR", "Resume Customizer Team"),
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "debug": env_config.get_env_bool("DEBUG", False),
+        "secret_key": os.getenv("SECRET_KEY"),
+        "encryption_key": os.getenv("ENCRYPTION_KEY"),
+    }
+
+# Cache the app config
+APP_CONFIG = _get_app_config()
+
+# SMTP Configuration with Environment Variable Support
+def _get_smtp_config() -> Dict[str, Dict[str, Any]]:
+    """Get SMTP configuration with environment variable overrides."""
+    # Base configuration
+    smtp_config = {
+        "Gmail": {"server": "smtp.gmail.com", "port": 465},
+        "Office365": {"server": "smtp.office365.com", "port": 587},
+        "Yahoo": {"server": "smtp.mail.yahoo.com", "port": 465},
+        "Custom": {"server": "Custom", "port": 587}
+    }
+    
+    # Environment variable overrides
+    custom_smtp = os.getenv("SMTP_SERVER")
+    custom_port = env_config.get_env_int("SMTP_PORT", 587)
+    
+    if custom_smtp and custom_smtp != "Custom":
+        smtp_config["Custom"] = {"server": custom_smtp, "port": custom_port}
+    
+    return smtp_config
+
+SMTP_SERVERS = _get_smtp_config()
 
 SMTP_SERVER_OPTIONS = ["smtp.gmail.com", "smtp.office365.com", "smtp.mail.yahoo.com", "Custom"]
 
-# Default Email Configuration
-DEFAULT_EMAIL_CONFIG = {
-    "subject": lambda: f"Customized Resume - {datetime.now().strftime('%Y-%m-%d')}",
-    "body": "Hi,\n\nPlease find the customized resume attached.\n\nThis resume highlights experience with various technologies and skills.\n\nBest regards",
-    "smtp_port": 465,
-}
+# Default Email Configuration with Environment Variable Support
+def _get_email_config() -> Dict[str, Any]:
+    """Get email configuration with environment variable overrides."""
+    return {
+        "subject": lambda: f"Customized Resume - {datetime.now().strftime('%Y-%m-%d')}",
+        "body": os.getenv("EMAIL_BODY", "Hi,\n\nPlease find the customized resume attached.\n\nThis resume highlights experience with various technologies and skills.\n\nBest regards"),
+        "smtp_port": env_config.get_env_int("SMTP_PORT", 465),
+        "smtp_username": os.getenv("SMTP_USERNAME"),
+        "smtp_password": os.getenv("SMTP_PASSWORD"),
+        "smtp_use_tls": env_config.get_env_bool("SMTP_USE_TLS", True),
+    }
+
+DEFAULT_EMAIL_CONFIG = _get_email_config()
 
 # Text Parsing Configuration
 PARSING_CONFIG = {
@@ -109,13 +264,18 @@ PARSING_CONFIG = {
     ]
 }
 
-# Document Processing Configuration
-DOC_CONFIG = {
-    "max_projects_enhanced": 3,
-    "bullet_markers": ['-', '•', '*'],
-    "default_filename": "resume.docx",
-    "max_project_title_length": 100,
-}
+# Document Processing Configuration with Environment Variable Support
+def _get_doc_config() -> Dict[str, Any]:
+    """Get document processing configuration with environment variable overrides."""
+    return {
+        "max_projects_enhanced": env_config.get_env_int("MAX_PROJECTS_ENHANCED", 3),
+        "bullet_markers": env_config.get_env_list("DEFAULT_BULLET_MARKERS", ['-', '•', '*']),
+        "default_filename": os.getenv("DEFAULT_FILENAME", "resume.docx"),
+        "max_project_title_length": env_config.get_env_int("MAX_PROJECT_TITLE_LENGTH", 100),
+        "max_file_size_mb": env_config.get_env_int("MAX_FILE_SIZE_MB", 50),
+    }
+
+DOC_CONFIG = _get_doc_config()
 
 # UI Configuration
 UI_CONFIG = {
@@ -181,12 +341,19 @@ SQL: • Designed and optimized database schemas • Wrote complex queries for r
     "tech_stack_help": "Format: 'TechName: • point1 • point2'",
 }
 
-# Performance Configuration
-PERFORMANCE_CONFIG = {
-    "estimated_sequential_time_per_resume": 8,  # seconds
-    "memory_cleanup_threshold": 10,  # number of processed files
-    "connection_pool_timeout": 30,  # seconds
-}
+# Performance Configuration with Environment Variable Support
+def _get_performance_config() -> Dict[str, Any]:
+    """Get performance configuration with environment variable overrides."""
+    return {
+        "estimated_sequential_time_per_resume": env_config.get_env_int("ESTIMATED_TIME_PER_RESUME", 8),
+        "memory_cleanup_threshold": env_config.get_env_int("MEMORY_CLEANUP_THRESHOLD", 10),
+        "connection_pool_timeout": env_config.get_env_int("CONNECTION_POOL_TIMEOUT", 30),
+        "cache_ttl": env_config.get_env_int("CACHE_TTL", 3600),
+        "enable_metrics_collection": env_config.get_env_bool("ENABLE_METRICS_COLLECTION", True),
+        "health_check_interval": env_config.get_env_int("HEALTH_CHECK_INTERVAL", 300),
+    }
+
+PERFORMANCE_CONFIG = _get_performance_config()
 
 # Error Messages
 ERROR_MESSAGES = {
@@ -333,4 +500,67 @@ def validate_config() -> ConfigValidationResult:
     
     return result
 
+
+def get_redis_config() -> Dict[str, Any]:
+    """Get Redis configuration from environment variables."""
+    return {
+        "url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        "max_connections": env_config.get_env_int("REDIS_MAX_CONNECTIONS", 10),
+        "timeout": env_config.get_env_int("REDIS_TIMEOUT", 30),
+        "enabled": env_config.get_env_bool("REDIS_ENABLED", False),
+    }
+
+
+def get_security_config() -> Dict[str, Any]:
+    """Get security configuration from environment variables."""
+    return {
+        "secret_key": os.getenv("SECRET_KEY"),
+        "encryption_key": os.getenv("ENCRYPTION_KEY"),
+        "enable_csrf_protection": env_config.get_env_bool("ENABLE_CSRF_PROTECTION", True),
+        "session_timeout": env_config.get_env_int("SESSION_TIMEOUT", 3600),
+        "max_login_attempts": env_config.get_env_int("MAX_LOGIN_ATTEMPTS", 5),
+    }
+
+
+def get_logging_config() -> Dict[str, Any]:
+    """Get logging configuration from environment variables."""
+    return {
+        "level": os.getenv("LOG_LEVEL", "INFO"),
+        "format": os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
+        "file_path": os.getenv("LOG_FILE_PATH", "logs/app.log"),
+        "max_file_size": env_config.get_env_int("LOG_MAX_FILE_SIZE", 10485760),  # 10MB
+        "backup_count": env_config.get_env_int("LOG_BACKUP_COUNT", 5),
+    }
+
+
+def is_production() -> bool:
+    """Check if running in production environment."""
+    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+
+def is_debug() -> bool:
+    """Check if debug mode is enabled."""
+    return env_config.get_env_bool("DEBUG", False)
+
+
+def create_env_template() -> bool:
+    """Create environment variable template file."""
+    return env_config.create_env_template()
+
+
+def reload_config() -> None:
+    """Reload configuration from environment variables."""
+    global APP_CONFIG, SMTP_SERVERS, DEFAULT_EMAIL_CONFIG, DOC_CONFIG, PERFORMANCE_CONFIG
+    
+    # Reload environment variables
+    env_config.load_env_file()
+    
+    # Reload configurations
+    APP_CONFIG = _get_app_config()
+    SMTP_SERVERS = _get_smtp_config()
+    DEFAULT_EMAIL_CONFIG = _get_email_config()
+    DOC_CONFIG = _get_doc_config()
+    PERFORMANCE_CONFIG = _get_performance_config()
+    
+    logger.info("Configuration reloaded from environment variables")
 

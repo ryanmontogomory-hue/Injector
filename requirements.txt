@@ -1,10 +1,12 @@
-# Distributed task queue
-celery>=5.3
-redis>=4.0
 # Core Dependencies
-streamlit
-python-docx
+streamlit>=1.28.0
+python-docx>=0.8.11
 python-multipart
+
+# Document Processing
+mammoth>=1.6.0
+python-pptx
+PyPDF2
 
 # Database Dependencies
 sqlalchemy>=2.0.0
@@ -13,10 +15,9 @@ psycopg[pool]>=3.1.0
 alembic>=1.12.0
 sqlalchemy-utils>=0.41.0
 
-# Document Processing
-mammoth
-python-pptx
-PyPDF2
+# Distributed task queue
+celery>=5.3
+redis>=4.0
 
 # System & Performance
 psutil
@@ -28,18 +29,17 @@ pytz
 cryptography>=41.0.0
 python-jose>=3.3.0
 passlib>=1.7.4
-secrets  # Built-in module, no version needed
 
 # Data Processing
 pandas
 numpy
 
-# Async & Concurrency
-asyncio
+# Concurrency
 concurrent-log-handler
 
 # Development Tools
 python-dotenv
+structlog>=23.0.0
 tqdm
 colorama
 

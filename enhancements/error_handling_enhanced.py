@@ -5,6 +5,7 @@ Provides structured error responses, user-friendly messages, and detailed loggin
 
 import traceback
 import uuid
+import time
 from datetime import datetime
 from typing import Dict, Any, Optional, Type, List
 from dataclasses import dataclass, field
@@ -13,8 +14,36 @@ import streamlit as st
 
 from utilities.logger import get_logger
 from audit_logger import audit_logger
+from contextlib import contextmanager
+import json
 
 logger = get_logger()
+
+# Try to use structlog for better structured logging
+try:
+    import structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.processors.JSONRenderer()
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+    structured_logger = structlog.get_logger()
+    STRUCTLOG_AVAILABLE = True
+except ImportError:
+    # Fallback to regular logger if structlog is not available
+    structured_logger = logger
+    STRUCTLOG_AVAILABLE = False
 
 
 class ErrorSeverity(Enum):
@@ -244,6 +273,185 @@ class ErrorHandler:
         return base_message
 
 
+@contextmanager
+def error_context(operation: str, **context):
+    """Standardized error context for consistent logging and handling."""
+    error_id = str(uuid.uuid4())[:8]
+    
+    # Start operation logging
+    structured_logger.info(
+        "Starting operation", 
+        operation=operation, 
+        error_id=error_id,
+        **context
+    )
+    
+    try:
+        yield error_id
+        # Success logging
+        structured_logger.info(
+            "Operation completed successfully", 
+            operation=operation, 
+            error_id=error_id,
+            **context
+        )
+    except Exception as e:
+        # Error logging with structured data
+        structured_logger.error(
+            "Operation failed", 
+            operation=operation,
+            error_id=error_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            **context
+        )
+        
+        # Handle the error using existing error handler
+        error_handler = ErrorHandler()
+        error_context_obj = ErrorContext(
+            user_id=context.get('user_id', st.session_state.get('user_id', 'anonymous')),
+            session_id=context.get('session_id', st.session_state.get('session_id')),
+            operation=operation,
+            file_name=context.get('file_name'),
+            additional_data=context
+        )
+        
+        severity = ErrorSeverity.MEDIUM
+        if 'severity' in context:
+            severity = context['severity']
+        
+        error_handler.handle_error(e, error_context_obj, show_to_user=True, severity=severity)
+        raise
+
+
+class PerformanceTimer:
+    """Context manager for timing operations and logging performance metrics."""
+    
+    def __init__(self, operation: str, **context):
+        self.operation = operation
+        self.context = context
+        self.start_time = None
+    
+    def __enter__(self):
+        self.start_time = time.time()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.start_time:
+            duration = time.time() - self.start_time
+            
+            # Log performance metrics
+            structured_logger.info(
+                "Operation performance",
+                operation=self.operation,
+                duration_seconds=duration,
+                success=exc_type is None,
+                **self.context
+            )
+            
+            # Store performance data in session state for monitoring
+            if 'performance_metrics' not in st.session_state:
+                st.session_state.performance_metrics = []
+            
+            st.session_state.performance_metrics.append({
+                'operation': self.operation,
+                'duration': duration,
+                'timestamp': time.time(),
+                'success': exc_type is None
+            })
+            
+            # Keep only last 100 metrics
+            if len(st.session_state.performance_metrics) > 100:
+                st.session_state.performance_metrics = st.session_state.performance_metrics[-100:]
+
+
+class HealthChecker:
+    """Health checker for application components."""
+    
+    def __init__(self):
+        self.checks = {}
+    
+    def register_check(self, name: str, check_func: callable, critical: bool = False):
+        """Register a health check function."""
+        self.checks[name] = {
+            'func': check_func,
+            'critical': critical
+        }
+    
+    def run_checks(self) -> Dict[str, Any]:
+        """Run all health checks and return status."""
+        results = {
+            'healthy': True,
+            'checks': {},
+            'errors': [],
+            'warnings': []
+        }
+        
+        for name, check_config in self.checks.items():
+            try:
+                with PerformanceTimer(f"health_check_{name}"):
+                    check_result = check_config['func']()
+                
+                results['checks'][name] = {
+                    'status': 'healthy' if check_result else 'unhealthy',
+                    'critical': check_config['critical']
+                }
+                
+                if not check_result:
+                    if check_config['critical']:
+                        results['healthy'] = False
+                        results['errors'].append(f"Critical check failed: {name}")
+                    else:
+                        results['warnings'].append(f"Non-critical check failed: {name}")
+                        
+            except Exception as e:
+                results['checks'][name] = {
+                    'status': 'error',
+                    'error': str(e),
+                    'critical': check_config['critical']
+                }
+                
+                if check_config['critical']:
+                    results['healthy'] = False
+                    results['errors'].append(f"Critical check error: {name}: {str(e)}")
+                else:
+                    results['warnings'].append(f"Check error: {name}: {str(e)}")
+        
+        return results
+
+
+# Global health checker instance
+health_checker = HealthChecker()
+
+# Register basic health checks
+def check_memory_usage() -> bool:
+    """Check if memory usage is within acceptable limits."""
+    try:
+        import psutil
+        memory = psutil.virtual_memory()
+        return memory.percent < 90  # Less than 90% memory usage
+    except ImportError:
+        return True  # Can't check, assume OK
+
+def check_disk_space() -> bool:
+    """Check if disk space is sufficient."""
+    try:
+        import psutil
+        disk = psutil.disk_usage('.')
+        return disk.free > 1024 * 1024 * 100  # At least 100MB free
+    except:
+        return True  # Can't check, assume OK
+
+def check_session_state() -> bool:
+    """Check if session state is properly initialized."""
+    return hasattr(st, 'session_state') and st.session_state is not None
+
+# Register health checks
+health_checker.register_check('memory_usage', check_memory_usage, critical=False)
+health_checker.register_check('disk_space', check_disk_space, critical=False)
+health_checker.register_check('session_state', check_session_state, critical=True)
+
+
 # Decorator for automatic error handling
 def handle_errors(
     operation: str,
@@ -311,7 +519,28 @@ class ErrorHandlerContext:
         return False
 
 
-# Usage examples:
+# Usage examples and utility functions:
+
+def get_error_summary() -> Dict[str, Any]:
+    """Get summary of errors from session state."""
+    if 'error_history' not in st.session_state:
+        st.session_state.error_history = []
+    
+    recent_errors = [e for e in st.session_state.error_history 
+                    if (datetime.now() - e.get('timestamp', datetime.now())).seconds < 3600]
+    
+    return {
+        'total_errors': len(st.session_state.error_history),
+        'recent_errors': len(recent_errors),
+        'error_types': list(set(e.get('error_type', 'Unknown') for e in recent_errors))
+    }
+
+
+def clear_error_history():
+    """Clear error history from session state."""
+    if 'error_history' in st.session_state:
+        st.session_state.error_history = []
+
 
 @handle_errors("file_processing", ErrorSeverity.HIGH, show_to_user=True, return_on_error=None)
 def process_resume_with_error_handling(file_obj, tech_stacks):
@@ -319,11 +548,28 @@ def process_resume_with_error_handling(file_obj, tech_stacks):
     # Your processing logic here
     pass
 
+
 def example_context_usage():
     """Example of using the error handler context manager."""
     with ErrorHandlerContext("email_sending", "resume.docx", ErrorSeverity.HIGH):
         # Email sending logic here
         # Any exceptions will be handled automatically
+        pass
+
+
+def example_new_context_usage():
+    """Example of using the new error context manager."""
+    with error_context("document_processing", file_name="resume.docx", user_id="user123"):
+        # Document processing logic here
+        # Automatic logging and error handling
+        pass
+
+
+def example_performance_timing():
+    """Example of using performance timer."""
+    with PerformanceTimer("bulk_processing", file_count=5):
+        # Bulk processing logic here
+        # Performance metrics will be automatically collected
         pass
 
 

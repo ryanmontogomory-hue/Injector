@@ -33,14 +33,47 @@ class ResumeTabHandler:
         
         # Tech stack input
         st.markdown("#### 📝 Tech Stack & Points")
-        st.info("Format: 'TechName: • point1 • point2' or use the block format below")
+        
+        # Show supported formats
+        with st.expander("📋 Supported Input Formats", expanded=False):
+            st.markdown("""
+**Only these 3 formats are supported:**
+
+**Format 1: Tech Stack (no colon) + Tabbed Bullet Points**
+```
+Java
+•	Point with tab indentation
+•	Another point with tab
+•	Third point with tab
+```
+
+**Format 2: Tech Stack with Colon + Tabbed Bullet Points**
+```
+Java:
+•	Point with tab indentation
+•	Another point with tab
+•	Third point with tab
+```
+
+**Format 3: Tech Stack (no colon) + Regular Bullet Points**
+```
+Java
+• Point with regular bullet (no tab)
+• Another point with regular bullet
+• Third point with regular bullet
+```
+
+**Note:** You can mix different formats in the same input.
+            """)
+        
+        st.warning("⚠️ Only the 3 formats above are accepted. Other formats will be rejected with detailed error messages.")
         
         # Text input for tech stacks
         text_input = st.text_area(
             "Paste your tech stack data here:",
             value=file_data.get('text', ''),
             height=150,
-            help="Example: Python: • Developed web applications • Implemented APIs\nJavaScript: • Created UI components • Used React",
+            help="Use only the 3 supported formats shown above. Example:\n\nJava\n•\tSpring Boot development\n•\tREST API implementation",
             key=f"tech_stack_{unique_key}"
         )
         file_data['text'] = text_input

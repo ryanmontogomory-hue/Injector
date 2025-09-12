@@ -3,6 +3,12 @@ Main application file for Resume Customizer - Refactored version.
 Uses modular components for better maintainability and code organization.
 """
 
+# EMERGENCY PATCH: Apply bullet consistency fix
+try:
+    from bullet_consistency_patch import apply_emergency_patch
+    apply_emergency_patch()
+except Exception as e:
+    print(f"Warning: Could not apply bullet consistency patch: {e}")
 
 import streamlit as st
 import base64
@@ -12,13 +18,10 @@ from typing import Dict, Any, Optional
 
 # Import custom modules
 from config import get_app_config, get_smtp_servers, get_default_email_subject, get_default_email_body, APP_CONFIG, validate_config
-from core.text_parser import parse_input_text, LegacyParser
-from core.resume_processor import get_resume_manager
-from core.email_handler import get_email_manager
-from utilities.logger import get_logger, display_logs_in_sidebar
-from utilities.validators import validate_session_state
-from monitoring.performance_monitor import get_performance_monitor
-from utilities.retry_handler import get_retry_handler
+from resume_customizer import parse_input_text, get_resume_manager, get_email_manager
+from resume_customizer.parsers.text_parser import LegacyParser
+from infrastructure import get_logger, get_performance_monitor, get_retry_handler
+from infrastructure.security.validators import validate_session_state
 
 # Import refactored UI and handlers
 from ui.components import UIComponents
@@ -32,7 +35,7 @@ from ui.utils import check_file_readiness, prepare_bulk_data
 from application_guide import app_guide
 
 # Import async processing components
-from core.async_integration import (
+from infrastructure.async_processing.async_integration import (
     initialize_async_services,
     process_documents_async,
     get_async_results,
@@ -50,14 +53,14 @@ from enhancements.error_handling_enhanced import (
 )
 
 # Import memory optimization
-from utilities.memory_optimizer import (
+from infrastructure.utilities.memory_optimizer import (
     get_memory_optimizer,
     with_memory_management,
     memory_efficient_batch
 )
 
 # Import structured logging
-from utilities.structured_logger import (
+from infrastructure.utilities.structured_logger import (
     get_structured_logger,
     with_structured_logging,
     log_performance,
@@ -258,6 +261,12 @@ def main():
 
     # Validate configuration first
     config_validation = validate_config()
+    
+    # Protect against None result
+    if config_validation is None:
+        st.error("❌ Configuration validation failed - no result returned")
+        st.stop()
+    
     if not config_validation.valid:
         st.error("❌ Configuration Error")
         for issue in config_validation.issues:
@@ -265,7 +274,7 @@ def main():
         st.stop()
     
     # Display configuration warnings if any
-    if config_validation.warnings:
+    if hasattr(config_validation, 'warnings') and config_validation.warnings:
         with st.sidebar:
             st.warning("⚠️ Configuration Warnings")
             for warning in config_validation.warnings:
@@ -395,7 +404,7 @@ def main():
                         st.info("No preview content available for this resume.")
             if st.button("❌ Close Preview ALL Tab", key="close_preview_all_tab"):
                 st.session_state['show_preview_all_tab'] = False
-                st.experimental_rerun()
+                st.rerun()
 
     with tab_bulk:
         # Bulk Processor Tab
@@ -438,14 +447,21 @@ def main():
         app_guide.render_main_tab()
 
     with tab_settings:
-        # Settings Tab
-        st.header("⚙️ Application Settings")
-        st.write("Configure application settings and preferences.")
+        # Enhanced Settings Tab with better UX
+        st.header("⚙️ Application Settings & Monitoring")
         
-        # Async Processing Status
-        st.subheader("⚡ High-Performance Mode")
-        if st.session_state.get('async_initialized'):
-            st.success("✅ Async processing enabled - Experience up to 6x faster processing!")
+        # Create settings sections
+        settings_tabs = st.tabs(["🚀 Performance", "📊 Monitoring", "🔧 Configuration", "🔍 Debug"])
+        
+        with settings_tabs[0]:
+            # Performance Settings
+            st.subheader("⚡ High-Performance Mode")
+            if st.session_state.get('async_initialized'):
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.success("✅ Async processing enabled - Experience up to 6x faster processing!")
+                with col2:
+                    st.metric("🚀 Speed Boost", "6x faster")
             
             # Cache statistics
             try:
@@ -481,53 +497,173 @@ def main():
                         pass
                 except Exception as e:
                     st.error(f"Failed to start memory cleanup: {e}")
-        else:
-            st.error("❌ Async processing disabled - Performance may be slower")
-            if st.button("🔄 Retry Async Initialization"):
-                st.session_state.async_initialized = initialize_async_services()
-                st.experimental_rerun()
-        
-        st.markdown("---")
-        
-        # Display application health status
-        st.subheader("🔍 Application Health")
-        if health_status['healthy']:
-            st.success("✅ Application is healthy")
-        else:
-            st.error("❌ Application has issues")
-        if health_status['warnings']:
-            st.warning("\n".join(["⚠️ " + w for w in health_status['warnings']]))
-        
-        # Performance Summary - moved inside settings tab
-        st.markdown("---")
-        st.subheader("📊 Performance Summary")
-        if st.checkbox("Show Performance Details", value=False, key="settings_performance_checkbox"):
-            with st.spinner("Collecting performance summary..."):
-                summary = performance_monitor.get_performance_summary()
-            if summary.get('system'):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("CPU Usage", f"{summary['system'].get('cpu_percent', 0):.1f}%")
-                with col2:
-                    st.metric("Memory Usage", f"{summary['system'].get('memory_percent', 0):.1f}%")
-                with col3:
-                    st.metric("Memory Used", f"{summary['system'].get('memory_used_mb', 0):.0f}MB")
-                    
-                # Show lazy loading stats if available
-                try:
-                    from utilities.lazy_imports import get_lazy_module_stats
-                    lazy_stats = get_lazy_module_stats()
-                    if lazy_stats['loaded_count'] > 0:
-                        st.markdown("**Lazy Loading:**")
-                        st.text(f"Loaded modules: {lazy_stats['loaded_count']}")
-                        if lazy_stats['loaded_modules']:
-                            with st.expander("Loaded modules details"):
-                                for module in lazy_stats['loaded_modules']:
-                                    st.text(f"• {module}")
-                except ImportError:
-                    pass
             else:
-                st.info("Performance data not available.")
+                st.error("❌ Async processing disabled - Performance may be slower")
+                if st.button("🔄 Retry Async Initialization"):
+                    st.session_state.async_initialized = initialize_async_services()
+                    st.rerun()
+            
+            st.markdown("---")
+            
+            # Display application health status
+            st.subheader("🔍 Application Health")
+            if health_status['healthy']:
+                st.success("✅ Application is healthy")
+            else:
+                st.error("❌ Application has issues")
+            if health_status['warnings']:
+                st.warning("\n".join(["⚠️ " + w for w in health_status['warnings']]))
+        
+        with settings_tabs[1]:
+            # Enhanced Monitoring Section
+            st.subheader("📊 System Monitoring")
+            
+            # Use enhanced metrics panel
+            ui.render_enhanced_metrics_panel()
+            
+            # Performance Summary with better UX
+            if st.checkbox("Show Detailed Performance Data", value=False, key="settings_performance_checkbox"):
+                with st.spinner("🔍 Collecting performance data..."):
+                    summary = performance_monitor.get_performance_summary()
+                
+                if summary.get('system'):
+                    st.markdown("#### System Resources")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        cpu_percent = summary['system'].get('cpu_percent', 0)
+                        cpu_color = "normal" if cpu_percent < 80 else "inverse"
+                        st.metric(
+                            "🖥️ CPU Usage", 
+                            f"{cpu_percent:.1f}%",
+                            delta=f"{cpu_percent - 50:.1f}%" if cpu_percent > 50 else None
+                        )
+                    
+                    with col2:
+                        memory_percent = summary['system'].get('memory_percent', 0)
+                        st.metric(
+                            "💾 Memory Usage", 
+                            f"{memory_percent:.1f}%",
+                            delta=f"{memory_percent - 60:.1f}%" if memory_percent > 60 else None
+                        )
+                    
+                    with col3:
+                        memory_used = summary['system'].get('memory_used_mb', 0)
+                        st.metric(
+                            "📈 Memory Used", 
+                            f"{memory_used:.0f}MB"
+                        )
+                    
+                    # System health indicators
+                    st.markdown("#### Health Indicators")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if cpu_percent > 80:
+                            st.warning("🔥 High CPU usage detected")
+                        elif cpu_percent < 20:
+                            st.success("😎 CPU running efficiently")
+                        else:
+                            st.info("🔄 CPU usage normal")
+                    
+                    with col2:
+                        if memory_percent > 85:
+                            st.error("⚠️ High memory usage - consider restarting")
+                        elif memory_percent < 40:
+                            st.success("😎 Memory usage optimal")
+                        else:
+                            st.info("📊 Memory usage normal")
+                    
+                    # Show lazy loading stats if available
+                    try:
+                        from utilities.lazy_imports import get_lazy_module_stats
+                        lazy_stats = get_lazy_module_stats()
+                        if lazy_stats['loaded_count'] > 0:
+                            with st.expander("📦 Lazy Loading Statistics", expanded=False):
+                                st.metric("Loaded Modules", lazy_stats['loaded_count'])
+                                if lazy_stats['loaded_modules']:
+                                    st.markdown("**Loaded Modules:**")
+                                    for module in lazy_stats['loaded_modules']:
+                                        st.text(f"• {module}")
+                    except ImportError:
+                        pass
+                else:
+                    st.info("📉 Performance data not available - system monitoring may be disabled")
+        
+        with settings_tabs[2]:
+            # Configuration Management
+            st.subheader("🔧 Application Configuration")
+            
+            # Environment info
+            from config import is_production, is_debug
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                environment = "Production" if is_production() else "Development"
+                env_color = "normal" if is_production() else "inverse"
+                st.metric("🌍 Environment", environment)
+            
+            with col2:
+                debug_status = "Enabled" if is_debug() else "Disabled"
+                st.metric("🐛 Debug Mode", debug_status)
+            
+            # Configuration actions
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Reload Configuration", help="Reload configuration from environment variables"):
+                    try:
+                        from config import reload_config
+                        reload_config()
+                        st.success("✅ Configuration reloaded successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Failed to reload configuration: {str(e)}")
+            
+            with col2:
+                if st.button("📋 Create .env Template", help="Generate a template .env file"):
+                    try:
+                        from config import create_env_template
+                        if create_env_template():
+                            st.success("✅ .env template created successfully!")
+                            st.info("📝 Check your project directory for .env.template")
+                        else:
+                            st.error("❌ Failed to create .env template")
+                    except Exception as e:
+                        st.error(f"❌ Error creating template: {str(e)}")
+        
+        with settings_tabs[3]:
+            # Debug and Troubleshooting
+            st.subheader("🔍 Debug & Troubleshooting")
+            
+            # Session state inspector
+            if st.checkbox("Show Session State", help="Display current session state for debugging"):
+                with st.expander("📊 Session State Details", expanded=False):
+                    filtered_state = {k: v for k, v in st.session_state.items() 
+                                    if not k.startswith('_') and k != 'resume_inputs'}
+                    st.json(filtered_state)
+            
+            # Error history
+            try:
+                from utilities.error_integration import get_error_summary, clear_error_history
+                error_summary = get_error_summary()
+                
+                if error_summary['total_errors'] > 0:
+                    st.markdown("#### Error History")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric("Total Errors", error_summary['total_errors'])
+                    with col2:
+                        st.metric("Recent Errors", error_summary['recent_errors'])
+                    with col3:
+                        if st.button("🗑️ Clear Errors"):
+                            clear_error_history()
+                            st.success("Error history cleared!")
+                            st.rerun()
+                else:
+                    st.success("🎉 No errors recorded in this session!")
+            except ImportError:
+                st.info("📉 Enhanced error tracking not available")
 
     # Footer with version info
     version = config.get('version', '1.0.0')
