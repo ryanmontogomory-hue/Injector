@@ -6,7 +6,7 @@ showWarningOnDirectExecution = false
 [server]
 # Server settings optimized for performance
 runOnSave = false
-port = 8501
+port = 5000
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 200
@@ -15,6 +15,7 @@ baseUrlPath = ""
 enableWebsocketCompression = true
 enableStaticServing = true
 headless = true
+allowedOrigins = ["*"]
 
 [browser]
 # Browser settings optimized for performance
