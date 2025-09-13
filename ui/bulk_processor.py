@@ -40,7 +40,7 @@ class BulkProcessor:
             async_result = process_documents_async(documents)
             if async_result['success']:
                 st.success(async_result['message'])
-                st.balloons()
+                # Removed balloon animation for better performance
                 
                 # Store task IDs for tracking
                 st.session_state['bulk_generation_tasks'] = async_result['task_ids']

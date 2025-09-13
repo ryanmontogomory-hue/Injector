@@ -212,8 +212,7 @@ class UIComponents:
                             "total_size_mb": summary.get('total_size_mb', 0)
                         })
                     
-                    # Success animation
-                    st.balloons()
+                    # Success notification (removed balloon animation for better performance)
         
         return uploaded_files
     
@@ -454,7 +453,7 @@ def show_toast_message(message: str, message_type: str = "success"):
     """Show a toast-style message (using Streamlit's built-in methods)."""
     if message_type == "success":
         st.success(message)
-        st.balloons()
+        # Removed balloon animation for better performance
     elif message_type == "error":
         st.error(message)
     elif message_type == "warning":

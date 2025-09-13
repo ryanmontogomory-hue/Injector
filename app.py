@@ -723,7 +723,6 @@ def main():
                         
                         if validation_result['success']:
                             st.toast("🎉 All files validated successfully!", icon="✅")
-                            st.balloons()
                         else:
                             st.toast(f"❌ Validation failed: {validation_result['message']}", icon="⚠️")
             
@@ -901,7 +900,6 @@ def main():
                     status_text.text("✅ All files processed successfully!")
                     
                 st.toast(f"🎉 Bulk processing completed! {len(uploaded_files)} resumes processed.", icon="✅")
-                st.balloons()
             
             bulk_processor.render_bulk_actions(uploaded_files)
 
