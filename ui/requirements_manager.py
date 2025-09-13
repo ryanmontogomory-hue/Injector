@@ -382,11 +382,11 @@ def render_requirement_form(requirement_data: Optional[Dict[str, Any]] = None) -
         
         with col1:
             # 1. Req Status (Dropdown)
-            status_options = ["New working", "Applied", "Cancelled", "Submitted", "Interviewed", "On Hold"]
+            status_options = ["New", "Working", "Applied", "Cancelled", "Submitted", "Interviewed", "On Hold"]
             form_data['req_status'] = st.selectbox(
                 "Req Status*",
                 options=status_options,
-                index=status_options.index(form_data.get('req_status', 'New working')) if form_data.get('req_status') in status_options else 0
+                index=status_options.index(form_data.get('req_status', 'New')) if form_data.get('req_status') in status_options else 0
             )
             
             # Update legacy status field for backward compatibility
