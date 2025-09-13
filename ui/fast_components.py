@@ -18,9 +18,8 @@ class FastUIManager:
         self.component_cache = {}
         self.render_cache = {}
     
-    @st.cache_data(ttl=300)
-    def fast_sidebar(_self, _config_data: Dict[str, Any]):
-        """Super fast sidebar with caching."""
+    def fast_sidebar(self, _config_data: Dict[str, Any]):
+        """Super fast sidebar."""
         with st.sidebar:
             st.title("🚀 Resume Customizer")
             st.markdown("**Ultra-Fast Mode Enabled**")
@@ -30,9 +29,8 @@ class FastUIManager:
                 st.metric("⚡ Load Time", f"{st.session_state.get('load_time', 0):.2f}s")
                 st.metric("📦 Cached Components", len(self.component_cache))
     
-    @st.cache_data(ttl=60)
-    def fast_file_uploader(_self, _key: str, max_files: int = 10):
-        """Cached file uploader that remembers previous uploads."""
+    def fast_file_uploader(self, _key: str, max_files: int = 10):
+        """Fast file uploader with unique keys."""
         return st.file_uploader(
             "📁 Upload Resume Files",
             type=['docx'],
@@ -41,8 +39,7 @@ class FastUIManager:
             help="Drag and drop DOCX files here for lightning-fast processing"
         )
     
-    @st.cache_data(ttl=300)
-    def fast_tabs(_self, tab_names: List[str], _key: str):
+    def fast_tabs(self, tab_names: List[str], _key: str):
         """Ultra-fast tabs with minimal rerendering."""
         return st.tabs(tab_names)
     
