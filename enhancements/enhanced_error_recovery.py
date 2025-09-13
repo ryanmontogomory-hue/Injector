@@ -439,7 +439,7 @@ class RobustResumeProcessor:
     def _get_base_processor(self):
         """Lazy load the base processor to avoid circular imports."""
         if self.base_processor is None:
-            from core.resume_processor import ResumeProcessor
+            from resume_customizer.processors.resume_processor import ResumeProcessor
             self.base_processor = ResumeProcessor()
         return self.base_processor
     

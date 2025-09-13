@@ -257,6 +257,10 @@ class PerformanceMonitor:
         
         logger.info("Performance monitoring stopped")
     
+    def record_metric(self, name: str, value: float, unit: str = "", **metadata):
+        """Record a performance metric."""
+        self.collector.record_metric(name, value, unit, **metadata)
+    
     def time_operation(self, operation_name: str, **metadata) -> PerformanceTimer:
         """Get a timer context manager for an operation."""
         return PerformanceTimer(operation_name, self.collector, **metadata)

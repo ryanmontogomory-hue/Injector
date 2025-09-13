@@ -31,7 +31,7 @@ structured_logger = get_structured_logger("distributed_cache")
 @dataclass
 class CacheConfig:
     """Configuration for distributed cache."""
-    redis_url: Optional[str] = "redis://localhost:6379/0"
+    redis_url: Optional[str] = None  # Disabled for Replit environment
     redis_timeout: float = 5.0
     local_cache_size: int = 1000
     local_cache_ttl: int = 3600
