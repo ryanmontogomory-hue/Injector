@@ -37,6 +37,13 @@ class PostgreSQLRequirementsManager:
         self._stats_cache_ttl = 300  # 5 minutes cache for stats
         self._last_stats_update = None
     
+    def _check_database_initialized(self) -> bool:
+        """Check if database connection is properly initialized"""
+        try:
+            return db_manager._is_connected and db_manager.engine is not None
+        except:
+            return False
+    
     @contextmanager
     def _get_session_with_context(self, user_id: str = None, session_id: str = None):
         """Get database session with audit context"""
@@ -403,6 +410,11 @@ class PostgreSQLRequirementsManager:
             List of requirement dictionaries
         """
         try:
+            # CRITICAL FIX: Check if database is initialized before queries  
+            if not self._check_database_initialized():
+                logger.error("❌ Database not initialized for list_requirements")
+                return []
+            
             with get_db_session() as session:
                 # Start with base query
                 query = session.query(Requirement).options(

@@ -27,18 +27,17 @@ class RequirementsManager:
         
         if self.use_database:
             try:
-                from database import PostgreSQLRequirementsManager, setup_database_environment
-                # Setup database environment
-                env_result = setup_database_environment()
-                if env_result['success']:
-                    self.db_manager = PostgreSQLRequirementsManager()
-                    logger.info("✅ Using PostgreSQL backend for requirements")
-                else:
-                    logger.warning("⚠️ PostgreSQL setup failed, falling back to JSON storage")
-                    self.use_database = False
-                    self.requirements = self._load_requirements()
+                from database import PostgreSQLRequirementsManager
+                # CRITICAL FIX: Database should already be initialized by app.py
+                # This prevents initialization loops and restart issues
+                self.db_manager = PostgreSQLRequirementsManager()
+                logger.info("✅ Using PostgreSQL backend for requirements")
             except ImportError:
                 logger.warning("⚠️ PostgreSQL dependencies not available, using JSON storage")
+                self.use_database = False
+                self.requirements = self._load_requirements()
+            except Exception as e:
+                logger.warning(f"⚠️ PostgreSQL initialization failed: {e}, falling back to JSON storage")
                 self.use_database = False
                 self.requirements = self._load_requirements()
         else:
