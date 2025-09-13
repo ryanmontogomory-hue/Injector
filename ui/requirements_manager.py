@@ -382,7 +382,7 @@ def render_requirement_form(requirement_data: Optional[Dict[str, Any]] = None) -
         
         with col1:
             # 1. Req Status (Dropdown)
-            status_options = ["New", "Working", "Applied", "Cancelled", "Submitted", "Interviewed", "On Hold"]
+            status_options = ["New", "Applied", "Cancelled", "Submitted", "Interviewed", "On Hold"]
             form_data['req_status'] = st.selectbox(
                 "Req Status*",
                 options=status_options,
