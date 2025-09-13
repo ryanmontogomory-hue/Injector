@@ -663,8 +663,7 @@ def render_requirement_form(requirement_data: Optional[Dict[str, Any]] = None) -
                 if 'marketing_comments' not in form_data:
                     form_data['marketing_comments'] = []
                 form_data['marketing_comments'].append(new_comment_obj)
-                # Clear the comment from session state after adding
-                st.session_state[new_comment_key] = ""
+                # Note: Session state will be cleared on next rerun automatically
                 
             # Ensure all nested dictionaries exist with proper structure
             if 'vendor_details' not in form_data:
