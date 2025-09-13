@@ -46,7 +46,7 @@ def test_imports():
         tests_failed += 1
     
     try:
-        from infrastructure.security.enhancements import InputSanitizer
+        from infrastructure.security.security_enhancements import InputSanitizer
         print("  ✅ InputSanitizer imported successfully")
         tests_passed += 1
     except Exception as e:

@@ -1182,7 +1182,7 @@ def force_memory_cleanup() -> None:
         
         # Clear performance cache if memory is low
         try:
-            from monitoring.performance_cache import get_cache_manager
+            from infrastructure.monitoring.performance_cache import get_cache_manager
             cache_manager = get_cache_manager()
             
             # Check memory usage before clearing

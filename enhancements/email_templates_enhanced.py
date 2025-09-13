@@ -15,7 +15,7 @@ import streamlit as st
 
 from utilities.logger import get_logger
 from utilities.structured_logger import get_structured_logger
-from security_enhancements import InputSanitizer
+from infrastructure.security.security_enhancements import InputSanitizer
 
 logger = get_logger()
 structured_logger = get_structured_logger("email_templates")

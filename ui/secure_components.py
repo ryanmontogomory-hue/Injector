@@ -6,7 +6,7 @@ Integrates security enhancements with user interface elements.
 import streamlit as st
 import base64
 from typing import Dict, Any, Optional, Tuple
-from security_enhancements import (
+from infrastructure.security.security_enhancements import (
     SecurePasswordManager, 
     InputSanitizer, 
     RateLimiter,

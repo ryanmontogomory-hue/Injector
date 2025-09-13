@@ -2,9 +2,9 @@ import streamlit as st
 import time
 from typing import List, Dict, Any, Optional
 
-from monitoring.performance_monitor import performance_decorator
+from infrastructure.monitoring.performance_monitor import performance_decorator
 from utilities.logger import get_logger
-from core.async_integration import process_documents_async, get_async_results
+from infrastructure.async_processing.async_integration import process_documents_async, get_async_results
 
 logger = get_logger()
 
@@ -120,7 +120,7 @@ class BulkProcessor:
     @performance_decorator("bulk_processing")
     def process_bulk_resumes(self, ready_files, files_data, max_workers, show_progress, performance_stats, bulk_email_mode):
         """Process multiple resumes in bulk mode."""
-        from utilities.validators import get_rate_limiter
+        from infrastructure.security.validators import get_rate_limiter
         if 'user_id' not in st.session_state:
             st.session_state['user_id'] = 'anonymous'
         user_id = st.session_state.get('user_id', 'anonymous')

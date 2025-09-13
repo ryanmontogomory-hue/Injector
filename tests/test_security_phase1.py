@@ -12,7 +12,7 @@ def test_imports():
     print("🔍 Testing security module imports...")
     
     try:
-        from security_enhancements import (
+        from infrastructure.security.security_enhancements import (
             SecurePasswordManager, 
             InputSanitizer, 
             RateLimiter,
@@ -29,7 +29,7 @@ def test_password_encryption():
     print("\n🔍 Testing password encryption...")
     
     try:
-        from security_enhancements import SecurePasswordManager
+        from infrastructure.security.security_enhancements import SecurePasswordManager
         
         manager = SecurePasswordManager()
         test_password = "test_password_123"
@@ -60,7 +60,7 @@ def test_input_sanitization():
     print("\n🔍 Testing input sanitization...")
     
     try:
-        from security_enhancements import InputSanitizer
+        from infrastructure.security.security_enhancements import InputSanitizer
         
         sanitizer = InputSanitizer()
         
@@ -105,7 +105,7 @@ def test_rate_limiting():
     print("\n🔍 Testing rate limiting...")
     
     try:
-        from security_enhancements import RateLimiter
+        from infrastructure.security.security_enhancements import RateLimiter
         
         limiter = RateLimiter()
         user_id = "test_user"
@@ -145,7 +145,7 @@ def test_csrf_protection():
     print("\n🔍 Testing CSRF protection...")
     
     try:
-        from security_enhancements import SessionSecurityManager
+        from infrastructure.security.security_enhancements import SessionSecurityManager
         
         manager = SessionSecurityManager()
         

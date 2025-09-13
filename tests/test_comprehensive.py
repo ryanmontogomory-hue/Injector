@@ -16,10 +16,10 @@ sys.path.append('..')
 # Import modules to test
 from config import validate_config, APP_CONFIG
 from core.text_parser import TechStackParser
-from utilities.validators import FileValidator, EmailValidator
+from infrastructure.security.validators import FileValidator, EmailValidator
 from enhancements.error_handling_enhanced import ErrorHandler, ErrorContext, ErrorSeverity
 from utilities.memory_optimizer import MemoryOptimizer, MemoryMonitor
-from security_enhancements import SecurePasswordManager, InputSanitizer, RateLimiter
+from infrastructure.security.security_enhancements import SecurePasswordManager, InputSanitizer, RateLimiter
 
 
 class TestConfiguration:

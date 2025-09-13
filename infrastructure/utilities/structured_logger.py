@@ -310,11 +310,14 @@ def get_structured_logger(component_name: str) -> StructuredLogger:
 # Create a default processing logger instance
 processing_logger = get_structured_logger("processing")
 
+# Create app logger instance
+app_logger = get_structured_logger("app")
+
 # Log analytics instance
 log_analytics = LogAnalytics()
 
 # Backward compatibility
-__all__ = ['StructuredLogger', 'get_structured_logger', 'processing_logger', 'with_structured_logging']
+__all__ = ['StructuredLogger', 'get_structured_logger', 'processing_logger', 'app_logger', 'with_structured_logging', 'log_performance']
 
 
 

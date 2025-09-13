@@ -6,7 +6,7 @@ Only accepts 3 specific formats as defined by user requirements.
 import re
 from typing import List, Tuple, Optional, Dict
 from infrastructure.utilities.logger import get_logger
-from infrastructure.security.enhancements import InputSanitizer
+from infrastructure.security.security_enhancements import InputSanitizer
 
 logger = get_logger()
 

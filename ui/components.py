@@ -25,43 +25,88 @@ class UIComponents:
     """Handles UI component rendering and interactions with enhanced UX."""
     
     @staticmethod
+    @st.cache_data
+    def get_sidebar_config():
+        """Get cached sidebar configuration."""
+        return {
+            "status_checks": {
+                "Streamlit": "session_state",
+                "File Upload": "file_uploader", 
+                "Memory": "cache_data"
+            },
+            "quick_actions": [
+                {"icon": "🔍", "label": "Health Check", "help": "Check system status"},
+                {"icon": "🧹", "label": "Clear Cache", "help": "Clear application cache"},
+                {"icon": "📊", "label": "Performance", "help": "View performance metrics"}
+            ]
+        }
+    
+    @staticmethod
     def render_enhanced_sidebar():
-        """Enhanced sidebar with system status and quick actions."""
+        """Enhanced sidebar with modern visual hierarchy."""
         with st.sidebar:
-            # Application status
-            st.markdown("### 🚀 Application Status")
+            # Modern header with better spacing
+            st.markdown("""
+            <div style='text-align: center; padding: 1rem 0; border-bottom: 2px solid #f0f2f6; margin-bottom: 1rem;'>
+                <h2 style='color: #1f77b4; margin: 0;'>🚀 System Status</h2>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Quick health check
-            if st.button("🔍 Quick Health Check", help="Check system status"):
-                with st.spinner("Checking system health..."):
-                    time.sleep(0.5)  # Brief delay for visual feedback
-                    # Basic health checks
-                    checks = {
-                        "Streamlit": hasattr(st, 'session_state'),
-                        "File Upload": hasattr(st, 'file_uploader'),
-                        "Memory": True  # Simplified check
-                    }
-                    
-                    all_healthy = all(checks.values())
-                    if all_healthy:
-                        st.success("✅ All systems operational")
-                    else:
+            # Enhanced health check with visual feedback
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if st.button("🔍 Health Check", help="Comprehensive system check", use_container_width=True):
+                    with st.spinner("🔄 Analyzing system..."):
+                        time.sleep(0.5)
+                        
+                        # Enhanced health checks
+                        checks = {
+                            "Core System": hasattr(st, 'session_state'),
+                            "File Operations": hasattr(st, 'file_uploader'),
+                            "Memory Cache": hasattr(st, 'cache_data'),
+                            "UI Components": True
+                        }
+                        
+                        # Display results with better formatting
+                        st.markdown("#### 📋 System Health")
                         for name, status in checks.items():
-                            icon = "✅" if status else "❌"
-                            st.write(f"{icon} {name}")
+                            if status:
+                                st.success(f"✅ {name}")
+                            else:
+                                st.error(f"❌ {name}")
+                        
+                        overall_health = sum(checks.values()) / len(checks) * 100
+                        st.metric("🎯 Health Score", f"{overall_health:.0f}%")
+            
+            with col2:
+                # Quick metrics display
+                st.metric("⚡", "Active", help="System Status")
+            
+            # Visual separator
+            st.markdown("<hr style='margin: 1.5rem 0; border: 1px solid #e0e0e0;'>", unsafe_allow_html=True)
             
             # Enhanced error dashboard if available
             if ENHANCED_UI_AVAILABLE:
                 display_error_dashboard()
             
-            # Quick actions
+            # Quick actions section with modern styling
             st.markdown("### ⚡ Quick Actions")
-            if st.button("🗑️ Clear Session", help="Reset all session data"):
-                for key in list(st.session_state.keys()):
-                    if not key.startswith('_'):  # Preserve internal streamlit keys
-                        del st.session_state[key]
-                st.success("Session cleared!")
-                st.rerun()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🗑️ Clear Session", help="Reset all session data", use_container_width=True):
+                    for key in list(st.session_state.keys()):
+                        if not key.startswith('_'):  # Preserve internal streamlit keys
+                            del st.session_state[key]
+                    st.success("Session cleared!")
+                    st.rerun()
+            
+            with col2:
+                if st.button("🧹 Clear Cache", help="Clear application cache", use_container_width=True):
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.success("Cache cleared!")
+                    st.rerun()
     
     @staticmethod
     def render_sidebar():

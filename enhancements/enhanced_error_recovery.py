@@ -17,7 +17,7 @@ from io import BytesIO
 from utilities.logger import get_logger
 from utilities.structured_logger import get_structured_logger
 from .error_handling_enhanced import ErrorHandler, ErrorContext, ErrorSeverity
-from monitoring.circuit_breaker import CircuitBreakerError, get_circuit_breaker, CircuitBreakerConfig
+from infrastructure.monitoring.circuit_breaker import CircuitBreakerError, get_circuit_breaker, CircuitBreakerConfig
 
 logger = get_logger()
 structured_logger = get_structured_logger("error_recovery")
@@ -508,7 +508,7 @@ class RobustResumeProcessor:
         """Perform gentle memory cleanup."""
         try:
             # Clear caches
-            from monitoring.performance_cache import get_cache_manager
+            from infrastructure.monitoring.performance_cache import get_cache_manager
             cache_manager = get_cache_manager()
             for cache_name in ['processing', 'parsing', 'document']:
                 cache = cache_manager.get_cache(cache_name)
@@ -529,7 +529,7 @@ class RobustResumeProcessor:
         """Perform aggressive memory cleanup."""
         try:
             # Clear all caches
-            from monitoring.performance_cache import get_cache_manager
+            from infrastructure.monitoring.performance_cache import get_cache_manager
             cache_manager = get_cache_manager()
             for cache_name in ['processing', 'parsing', 'document']:
                 cache_manager.get_cache(cache_name).clear()

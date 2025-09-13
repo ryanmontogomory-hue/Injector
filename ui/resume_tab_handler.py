@@ -2,8 +2,8 @@ import streamlit as st
 from io import BytesIO
 import base64
 import hashlib
-from monitoring.performance_monitor import performance_decorator
-from utilities.validators import TextValidator
+from infrastructure.monitoring.performance_monitor import performance_decorator
+from infrastructure.security.validators import TextValidator
 from utilities.logger import get_logger
 
 logger = get_logger()
@@ -297,7 +297,7 @@ Java
             st.warning(f"⚠️ Please enter tech stack data for {file.name} before previewing.")
             return
 
-        from utilities.validators import get_rate_limiter
+        from infrastructure.security.validators import get_rate_limiter
         user_id = st.session_state.get('user_id', 'anonymous')
         rate_limiter = get_rate_limiter()
         if rate_limiter.is_rate_limited(user_id, 'preview', max_requests=10, time_window=60):
@@ -351,7 +351,7 @@ Java
     @performance_decorator("resume_generation")
     def handle_generation(self, file, file_data):
         """Handle resume generation and email sending with async/caching integration."""
-        from utilities.validators import get_rate_limiter
+        from infrastructure.security.validators import get_rate_limiter
         user_id = st.session_state.get('user_id', 'anonymous')
         rate_limiter = get_rate_limiter()
         if rate_limiter.is_rate_limited(user_id, 'generation', max_requests=20, time_window=300):

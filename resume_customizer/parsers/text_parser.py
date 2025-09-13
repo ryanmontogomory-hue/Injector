@@ -9,7 +9,7 @@ from functools import lru_cache
 from config import PARSING_CONFIG
 from infrastructure.utilities.logger import get_logger
 from infrastructure.monitoring.performance_cache import cached, get_cache_manager
-from infrastructure.security.enhancements import InputSanitizer
+from infrastructure.security.security_enhancements import InputSanitizer
 
 logger = get_logger()
 

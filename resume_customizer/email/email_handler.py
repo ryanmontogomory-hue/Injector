@@ -14,8 +14,8 @@ from email.message import EmailMessage
 from config import SMTP_SERVERS, ERROR_MESSAGES
 from utilities.retry_handler import get_retry_handler, with_retry
 from utilities.logger import get_logger
-from security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
-from monitoring.circuit_breaker import smtp_circuit_breaker
+from infrastructure.security.security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
+from infrastructure.monitoring.circuit_breaker import smtp_circuit_breaker
 from enhancements.metrics_analytics_enhanced import record_email_sent
 from enhancements.email_templates_enhanced import get_template_manager
 

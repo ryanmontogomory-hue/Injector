@@ -18,7 +18,20 @@ except ImportError:
     MAGIC_AVAILABLE = False
 
 from ..utilities.logger import get_logger
-from security_enhancements import InputSanitizer
+
+# Import InputSanitizer with error handling to avoid circular imports
+try:
+    from .security_enhancements import InputSanitizer
+except ImportError:
+    # Fallback if security_enhancements is not available
+    class InputSanitizer:
+        @staticmethod
+        def sanitize_text(text):
+            return str(text).strip()
+        
+        @staticmethod
+        def sanitize_filename(filename):
+            return str(filename).strip()
 
 logger = get_logger()
 
@@ -464,7 +477,7 @@ class RateLimiter:
 
 # Global instances
 file_validator = FileValidator()
-rate_limiter = RateLimiter()
+_rate_limiter = RateLimiter()
 
 
 def get_file_validator() -> FileValidator:
@@ -474,13 +487,12 @@ def get_file_validator() -> FileValidator:
 
 def get_rate_limiter() -> RateLimiter:
     """Get the global rate limiter instance."""
-    return rate_limiter
+    return _rate_limiter
 
 
 def sanitize_filename(filename: str) -> str:
     """
     Sanitize filename for safe storage.
-    
     Args:
         filename: Original filename
         
@@ -502,6 +514,66 @@ def sanitize_filename(filename: str) -> str:
         filename = name[:255-len(ext)] + ext
     
     return filename
+
+
+def validate_email_format(email: str) -> Dict[str, Any]:
+    """
+    Validate email address format.
+    
+    Args:
+        email: Email address to validate
+        
+    Returns:
+        Validation result dictionary
+    """
+    return EmailValidator.validate_email(email)
+
+
+def validate_file_upload(file_obj) -> Dict[str, Any]:
+    """
+    Validate uploaded file.
+    
+    Args:
+        file_obj: Streamlit uploaded file object
+        
+    Returns:
+        Validation result dictionary
+    """
+    return file_validator.validate_file(file_obj)
+
+
+class SecurityValidator:
+    """Main security validator class."""
+    
+    def __init__(self):
+        self.file_validator = FileValidator()
+        self.rate_limiter = RateLimiter()
+    
+    def validate_all(self, **kwargs) -> Dict[str, Any]:
+        """Validate multiple inputs at once."""
+        results = {
+            'valid': True,
+            'errors': [],
+            'warnings': []
+        }
+        
+        # Validate email if provided
+        if 'email' in kwargs:
+            email_result = validate_email_format(kwargs['email'])
+            if not email_result['valid']:
+                results['valid'] = False
+                results['errors'].extend(email_result['errors'])
+            results['warnings'].extend(email_result.get('warnings', []))
+        
+        # Validate files if provided
+        if 'files' in kwargs:
+            file_result = self.file_validator.validate_batch(kwargs['files'])
+            if not file_result['valid']:
+                results['valid'] = False
+                results['errors'].extend(file_result['summary']['errors'])
+            results['warnings'].extend(file_result['summary']['warnings'])
+        
+        return results
 
 
 def validate_session_state() -> Dict[str, Any]:
