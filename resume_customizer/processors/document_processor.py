@@ -11,12 +11,12 @@ from io import BytesIO
 from docx import Document
 
 from config import DOC_CONFIG, PARSING_CONFIG
-from utilities.logger import get_logger
-from monitoring.performance_cache import cached, cache_key_for_file, get_cache_manager
-from monitoring.performance_monitor import performance_decorator
+from infrastructure.utilities.logger import get_logger
+from infrastructure.monitoring.performance_cache import cached, cache_key_for_file, get_cache_manager
+from infrastructure.monitoring.performance_monitor import performance_decorator
 from enhancements.error_handling_enhanced import handle_errors, ErrorSeverity, ErrorHandlerContext
-from utilities.memory_optimizer import get_memory_optimizer, with_memory_management
-from formatters.bullet_formatter import BulletFormatter, BulletFormatting
+from infrastructure.utilities.memory_optimizer import get_memory_optimizer, with_memory_management
+from resume_customizer.formatters.bullet_formatter import BulletFormatter, BulletFormatting
 
 logger = get_logger()
 
@@ -1206,3 +1206,24 @@ def force_memory_cleanup() -> None:
         logger.error(f"Error during aggressive memory cleanup: {e}")
 
 
+# Global instances and factory functions
+_document_processor_instance = None
+
+def get_document_processor() -> DocumentProcessor:
+    """Get singleton instance of DocumentProcessor."""
+    global _document_processor_instance
+    if _document_processor_instance is None:
+        _document_processor_instance = DocumentProcessor()
+    return _document_processor_instance
+
+def cleanup_document_resources():
+    """Cleanup document processing resources."""
+    global _document_processor_instance
+    if _document_processor_instance:
+        # Clear any cached data
+        _document_processor_instance = None
+    
+    # Force garbage collection
+    import gc
+    gc.collect()
+    logger.info("Document resources cleaned up")

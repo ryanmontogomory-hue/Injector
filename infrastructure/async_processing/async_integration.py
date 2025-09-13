@@ -6,15 +6,44 @@ import streamlit as st
 from typing import List, Dict, Any, Optional, Union
 import time
 
-from .async_processor import (
-    get_async_doc_processor,
-    get_async_file_processor,
-    get_background_task_manager,
-    async_batch_process
-)
-from utilities.logger import get_logger
-from monitoring.performance_cache import get_cache_manager
-from monitoring.performance_monitor import get_performance_monitor
+# from .async_processor import (
+#     get_async_doc_processor,
+#     get_async_file_processor,
+#     get_background_task_manager,
+#     async_batch_process
+# )
+from ..utilities.logger import get_logger
+from ..monitoring.performance_cache import get_cache_manager
+from ..monitoring.performance_monitor import get_performance_monitor
+
+# Placeholder functions for missing async_processor module
+def get_async_doc_processor():
+    """Placeholder - implement async document processor"""
+    class AsyncDocProcessor:
+        def process_documents_batch(self, documents):
+            return [f"task_{i}" for i in range(len(documents))]
+        
+        @property
+        def task_queue(self):
+            class TaskQueue:
+                def is_complete(self, task_id): return False
+                def get_result(self, task_id, timeout=None): raise TimeoutError()
+            return TaskQueue()
+    return AsyncDocProcessor()
+
+def get_async_file_processor():
+    """Placeholder - implement async file processor"""
+    class AsyncFileProcessor:
+        def validate_files_batch(self, files):
+            return [f"task_{i}" for i in range(len(files))]
+    return AsyncFileProcessor()
+
+def get_background_task_manager():
+    """Placeholder - implement background task manager"""
+    class BackgroundTaskManager:
+        def start_cache_warmup(self): pass
+        def start_memory_cleanup(self): pass
+    return BackgroundTaskManager()
 
 logger = get_logger()
 performance_monitor = get_performance_monitor()

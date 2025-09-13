@@ -11,7 +11,7 @@ import smtplib
 import socket
 from email.errors import MessageError
 
-from utilities.logger import get_logger
+from .logger import get_logger
 
 logger = get_logger()
 

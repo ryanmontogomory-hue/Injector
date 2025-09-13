@@ -15,11 +15,11 @@ import multiprocessing as mp
 from functools import partial
 import psutil
 
-from utilities.logger import get_logger
-from utilities.structured_logger import get_structured_logger
-from distributed_cache import get_distributed_cache_manager, cached_processing
-from enhanced_error_recovery import RobustResumeProcessor, get_error_recovery_manager
-from circuit_breaker import file_processing_circuit_breaker
+from infrastructure.utilities.logger import get_logger
+from infrastructure.utilities.structured_logger import get_structured_logger
+from infrastructure.monitoring.distributed_cache import get_distributed_cache_manager, cached_processing
+from .enhanced_error_recovery import RobustResumeProcessor, get_error_recovery_manager
+from infrastructure.monitoring.circuit_breaker import file_processing_circuit_breaker
 
 logger = get_logger()
 structured_logger = get_structured_logger("batch_processor")

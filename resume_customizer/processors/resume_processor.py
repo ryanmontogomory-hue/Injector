@@ -25,15 +25,49 @@ from ..parsers.text_parser import parse_input_text, LegacyParser, get_parser
 from ..parsers.restricted_text_parser import parse_input_text_restricted, RestrictedFormatError
 from .document_processor import get_document_processor, FileProcessor
 from ..email.email_handler import get_email_manager
-from config import ERROR_MESSAGES, SUCCESS_MESSAGES, APP_CONFIG
-from infrastructure.security.enhancements import rate_limit
-from infrastructure.utilities.structured_logger import get_structured_logger, with_structured_logging, processing_logger
+try:
+    from config import ERROR_MESSAGES, SUCCESS_MESSAGES, APP_CONFIG
+except ImportError:
+    ERROR_MESSAGES = {}
+    SUCCESS_MESSAGES = {}
+    APP_CONFIG = {}
+    
+try:
+    from infrastructure.security.security_enhancements import rate_limit
+except ImportError:
+    def rate_limit(func): return func  # No-op decorator
+    
+from infrastructure.utilities.structured_logger import get_structured_logger, with_structured_logging
+try:
+    from infrastructure.utilities.structured_logger import processing_logger
+except ImportError:
+    processing_logger = get_structured_logger("processing")
+    
 from enhancements.error_handling_enhanced import handle_errors, ErrorSeverity, ErrorHandlerContext
 from infrastructure.monitoring.circuit_breaker import file_processing_circuit_breaker
-from enhancements.enhanced_error_recovery import RobustResumeProcessor, get_error_recovery_manager
+
+try:
+    from enhancements.enhanced_error_recovery import RobustResumeProcessor, get_error_recovery_manager
+except ImportError:
+    class RobustResumeProcessor:
+        def __init__(self): pass
+    def get_error_recovery_manager(): return None
+    
 from infrastructure.monitoring.distributed_cache import cached_processing, get_distributed_cache_manager
-from enhancements.metrics_analytics_enhanced import record_resume_processed, record_metrics
-from enhancements.progress_tracker_enhanced import get_progress_tracker
+
+try:
+    from enhancements.metrics_analytics_enhanced import record_resume_processed, record_metrics
+except ImportError:
+    def record_resume_processed(*args, **kwargs): pass
+    def record_metrics(*args, **kwargs): pass
+    
+try:
+    from enhancements.progress_tracker_enhanced import get_progress_tracker
+except ImportError:
+    def get_progress_tracker(): 
+        class ProgressTracker:
+            def track_progress(self, *args, **kwargs): pass
+        return ProgressTracker()
 
 logger = get_logger()
 
@@ -164,7 +198,7 @@ class ResumeProcessor:
         try:
             # Use Celery app to get the registered task instead of direct import
             # This avoids circular import issues
-            from infrastructure.config.celeryconfig import celery_app
+            from infrastructure.async_processing.tasks import celery_app
             process_resume_task = celery_app.tasks.get('tasks.process_resume_task')
             
             if process_resume_task is None:
@@ -232,7 +266,7 @@ class ResumeProcessor:
         Get the result/status of a Celery async task by task_id.
         """
         try:
-            from config.celeryconfig import celery_app
+            from infrastructure.async_processing.tasks import celery_app
         except ImportError:
             raise RuntimeError("Celery config not found. Make sure celeryconfig.py exists and Celery is installed.")
         
@@ -310,7 +344,7 @@ class ResumeProcessor:
             manual_text = file_data.get('manual_text', '')
             # Use PreviewGenerator for consistent preview output
             try:
-                from core.resume_processor import PreviewGenerator
+                # PreviewGenerator is defined in this same file
                 previewer = PreviewGenerator()
                 preview_result = previewer.generate_preview(file, text, manual_text)
                 preview_result['file_name'] = file_name

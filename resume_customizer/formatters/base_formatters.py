@@ -77,6 +77,16 @@ class DocumentFormatter:
             pass
 
 
+class BaseFormatter:
+    """Base class for document formatters."""
+    
+    def __init__(self):
+        self.document_formatter = DocumentFormatter()
+    
+    def format_document(self, document: DocumentType) -> None:
+        """Base method for document formatting."""
+        pass
+
 class ListFormatterMixin:
     """Mixin class providing list formatting functionality."""
     

@@ -49,7 +49,7 @@ def test_imports():
     # Test 3: Import celeryconfig
     print("\n3. Testing celeryconfig import...")
     try:
-    from config.celeryconfig import celery_app
+        from infrastructure.config.celeryconfig import celery_app
         print("   ✅ SUCCESS: celeryconfig import works")
         print(f"   📋 Registered tasks: {list(celery_app.tasks.keys())}")
     except ImportError as e:
@@ -58,7 +58,7 @@ def test_imports():
     # Test 4: Test the ResumeProcessor import
     print("\n4. Testing ResumeProcessor async method...")
     try:
-        from core.resume_processor import ResumeProcessor
+        from resume_customizer.processors.resume_processor import ResumeProcessor
         processor = ResumeProcessor()
         # Create dummy file data
         from io import BytesIO

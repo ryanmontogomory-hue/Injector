@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from functools import wraps
 import streamlit as st
 
-from utilities.logger import get_logger
+from .logger import get_logger
 
 # Base logger
 base_logger = get_logger()
@@ -307,17 +307,14 @@ def get_structured_logger(component_name: str) -> StructuredLogger:
     """Get structured logger for component."""
     return LoggingManager.get_logger(component_name)
 
-
-# Global instances
-app_logger = get_structured_logger('application')
-processing_logger = get_structured_logger('document_processing')
-email_logger = get_structured_logger('email_handler')
-ui_logger = get_structured_logger('user_interface')
-security_logger = get_structured_logger('security')
-performance_logger = get_structured_logger('performance')
+# Create a default processing logger instance
+processing_logger = get_structured_logger("processing")
 
 # Log analytics instance
 log_analytics = LogAnalytics()
+
+# Backward compatibility
+__all__ = ['StructuredLogger', 'get_structured_logger', 'processing_logger', 'with_structured_logging']
 
 
 

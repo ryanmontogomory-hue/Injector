@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime
-from utilities.logger import get_logger
+from infrastructure.utilities.logger import get_logger
 
 logger = get_logger()
 

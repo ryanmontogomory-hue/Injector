@@ -15,7 +15,7 @@ from collections import OrderedDict
 from functools import wraps
 import psutil
 
-from utilities.logger import get_logger
+from ..utilities.logger import get_logger
 
 logger = get_logger()
 

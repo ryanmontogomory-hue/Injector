@@ -8,9 +8,9 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from health_monitor_enhanced import get_health_monitor, get_system_health, get_health_dashboard
-from metrics_analytics_enhanced import get_dashboard_metrics
-from logger import get_logger
+from enhancements.health_monitor_enhanced import get_health_monitor, get_system_health, get_health_dashboard
+from enhancements.metrics_analytics_enhanced import get_dashboard_metrics
+from infrastructure.utilities.logger import get_logger
 
 logger = get_logger()
 

@@ -2,14 +2,14 @@ import streamlit as st
 import time
 from typing import List, Dict, Any, Optional
 from config import UI_CONFIG, get_smtp_servers, get_default_email_subject, get_default_email_body, get_app_config
-from utilities.validators import get_file_validator, EmailValidator, TextValidator
-from core.text_parser import LegacyParser
-from utilities.logger import get_logger
-from security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
+from infrastructure.security.validators import get_file_validator, EmailValidator, TextValidator
+from resume_customizer.parsers.text_parser import LegacyParser
+from infrastructure.utilities.logger import get_logger
+from infrastructure.security.security_enhancements import SecurePasswordManager, InputSanitizer, rate_limit
 
 # Try to import enhanced error handling
 try:
-    from utilities.error_integration import (
+    from infrastructure.utilities.error_integration import (
         display_error_dashboard, display_performance_metrics, 
         safe_operation, log_user_action, create_error_boundary
     )

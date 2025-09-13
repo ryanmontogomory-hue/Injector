@@ -18,7 +18,7 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
 
-from utilities.logger import get_logger
+from ..utilities.logger import get_logger
 
 logger = get_logger()
 

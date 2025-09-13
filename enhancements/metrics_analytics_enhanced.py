@@ -14,8 +14,8 @@ import statistics
 import json
 import hashlib
 
-from utilities.logger import get_logger
-from utilities.structured_logger import get_structured_logger
+from infrastructure.utilities.logger import get_logger
+from infrastructure.utilities.structured_logger import get_structured_logger
 
 logger = get_logger()
 structured_logger = get_structured_logger("metrics_analytics")

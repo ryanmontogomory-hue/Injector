@@ -222,6 +222,8 @@ def _get_smtp_config() -> Dict[str, Dict[str, Any]]:
     
     return smtp_config
 
+
+# Cache the SMTP config
 SMTP_SERVERS = _get_smtp_config()
 
 SMTP_SERVER_OPTIONS = ["smtp.gmail.com", "smtp.office365.com", "smtp.mail.yahoo.com", "Custom"]

@@ -20,7 +20,9 @@ from typing import Dict, Any, Optional
 from config import get_app_config, get_smtp_servers, get_default_email_subject, get_default_email_body, APP_CONFIG, validate_config
 from resume_customizer import parse_input_text, get_resume_manager, get_email_manager
 from resume_customizer.parsers.text_parser import LegacyParser
-from infrastructure import get_logger, get_performance_monitor, get_retry_handler
+from infrastructure.utilities.logger import get_logger
+from infrastructure.monitoring.performance_monitor import get_performance_monitor
+from infrastructure.utilities.retry_handler import get_retry_handler
 from infrastructure.security.validators import validate_session_state
 
 # Import refactored UI and handlers
@@ -220,7 +222,7 @@ def main():
     
     # Preload essential modules for better performance
     try:
-        from utilities.lazy_imports import preload_essential_modules, get_lazy_module_stats
+        from infrastructure.utilities.lazy_imports import preload_essential_modules, get_lazy_module_stats
         preload_essential_modules()
     except ImportError:
         pass  # Lazy loading system not available
@@ -251,11 +253,11 @@ def main():
             force_refresh = True
     
     if 'resume_tab_handler' not in st.session_state or force_refresh:
-        from core.resume_processor import get_resume_manager
+        from resume_customizer.processors.resume_processor import get_resume_manager
         st.session_state.resume_tab_handler = ResumeTabHandler(resume_manager=get_resume_manager("v2.2"))
     
     if 'bulk_processor' not in st.session_state or force_refresh:
-        from core.resume_processor import get_resume_manager
+        from resume_customizer.processors.resume_processor import get_resume_manager
         st.session_state.bulk_processor = BulkProcessor(resume_manager=get_resume_manager("v2.2"))
     
 
@@ -465,7 +467,7 @@ def main():
             
             # Cache statistics
             try:
-                from monitoring.performance_cache import get_cache_manager
+                from infrastructure.monitoring.performance_cache import get_cache_manager
                 cache_manager = get_cache_manager()
                 st.markdown("**Cache Performance:**")
                 col1, col2, col3 = st.columns(3)
@@ -490,7 +492,7 @@ def main():
                     
                     # Also clear lazy import cache if available
                     try:
-                        from utilities.lazy_imports import clear_lazy_cache
+                        from infrastructure.utilities.lazy_imports import clear_lazy_cache
                         clear_lazy_cache()
                         st.info("Lazy import cache cleared")
                     except ImportError:
@@ -576,7 +578,7 @@ def main():
                     
                     # Show lazy loading stats if available
                     try:
-                        from utilities.lazy_imports import get_lazy_module_stats
+                        from infrastructure.utilities.lazy_imports import get_lazy_module_stats
                         lazy_stats = get_lazy_module_stats()
                         if lazy_stats['loaded_count'] > 0:
                             with st.expander("📦 Lazy Loading Statistics", expanded=False):
@@ -644,7 +646,7 @@ def main():
             
             # Error history
             try:
-                from utilities.error_integration import get_error_summary, clear_error_history
+                from infrastructure.utilities.error_integration import get_error_summary, clear_error_history
                 error_summary = get_error_summary()
                 
                 if error_summary['total_errors'] > 0:
@@ -700,11 +702,11 @@ def cleanup_on_exit():
     """Cleanup resources on application exit."""
     try:
         # Cleanup performance monitor
-        from monitoring.performance_monitor import cleanup_performance_monitor
+        from infrastructure.monitoring.performance_monitor import cleanup_performance_monitor
         cleanup_performance_monitor()
         
         # Cleanup document resources
-        from core.document_processor import cleanup_document_resources
+        from resume_customizer.processors.document_processor import cleanup_document_resources
         cleanup_document_resources()
         
         # Cleanup email connections

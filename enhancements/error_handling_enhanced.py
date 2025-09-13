@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import streamlit as st
 
-from utilities.logger import get_logger
+from infrastructure.utilities.logger import get_logger
 from audit_logger import audit_logger
 from contextlib import contextmanager
 import json

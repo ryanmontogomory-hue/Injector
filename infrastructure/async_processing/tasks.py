@@ -1,5 +1,5 @@
-from config.celeryconfig import celery_app
-from core.resume_processor import ResumeProcessor
+from ..config.celeryconfig import celery_app
+from resume_customizer.processors.resume_processor import ResumeProcessor
 from io import BytesIO
 import base64
 
