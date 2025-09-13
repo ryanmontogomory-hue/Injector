@@ -94,6 +94,7 @@ class DatabaseConnectionManager:
                 'connect_args': {
                     'connect_timeout': 10,
                     'application_name': 'ResumeCustomizer',
+                    'sslmode': 'require',  # Required for Replit/Neon databases
                     'options': '-c statement_timeout=60000'  # 60 second query timeout
                 },
                 **kwargs
@@ -128,6 +129,20 @@ class DatabaseConnectionManager:
     
     def _build_connection_string(self) -> str:
         """Build PostgreSQL connection string from environment variables"""
+        # First, check for DATABASE_URL (preferred for Replit and cloud deployments)
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            logger.info("🔗 Using DATABASE_URL for database connection")
+            # Extract host info for logging
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(database_url)
+                logger.info(f"📡 Connecting to database: {parsed.hostname}:{parsed.port or 5432}/{parsed.path[1:] if parsed.path else 'unknown'}")
+            except:
+                logger.info("📡 Using DATABASE_URL (connection details parsed)")
+            return database_url
+        
+        # Fallback to individual environment variables
         db_config = {
             'host': os.getenv('DB_HOST', 'localhost'),
             'port': os.getenv('DB_PORT', '5432'),
@@ -155,13 +170,16 @@ class DatabaseConnectionManager:
             """Configure connection on creation"""
             self._connection_stats['total_connections'] += 1
             
-            # PostgreSQL-specific optimizations
+            # Only set session-level optimizations that work with managed databases
             with dbapi_connection.cursor() as cursor:
-                # Set session-level optimizations
-                cursor.execute("SET synchronous_commit TO off")  # Better write performance
-                cursor.execute("SET wal_buffers TO '16MB'")  # Optimize WAL buffer
-                cursor.execute("SET checkpoint_completion_target TO 0.9")
-                cursor.execute("SET random_page_cost TO 1.1")  # SSD optimization
+                try:
+                    # Set only parameters that are typically allowed in managed databases
+                    cursor.execute("SET application_name TO 'ResumeCustomizer'")
+                    cursor.execute("SET timezone TO 'UTC'")
+                    # Skip WAL and checkpoint settings as they require server restart
+                except Exception as e:
+                    # Ignore connection setup errors for managed databases
+                    logger.debug(f"Connection setup warning: {e}")
                 
         @event.listens_for(self.engine, 'checkout')
         def on_checkout(dbapi_connection, connection_record, connection_proxy):
