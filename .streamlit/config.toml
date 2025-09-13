@@ -13,9 +13,8 @@ maxUploadSize = 200
 maxMessageSize = 200
 baseUrlPath = ""
 enableWebsocketCompression = true
-enableStaticServing = true
+enableStaticServing = false
 headless = true
-allowedOrigins = ["*"]
 
 [browser]
 # Browser settings optimized for performance
@@ -35,8 +34,6 @@ font = "sans serif"
 magicEnabled = true
 fastReruns = true
 enforceSerializableSessionState = false
-fixedWidthMode = false
-postProcessing = true
 
 [client]
 # Client-side optimizations
