@@ -14,8 +14,35 @@ from typing import Dict, Any, Optional
 # Essential imports only - lazy load others
 from config import get_app_config, APP_CONFIG, validate_config
 from infrastructure.utilities.logger import get_logger
-from performance_optimizations import perf_monitor, perf_optimizer, optimize_streamlit_config
-from ui.progressive_loader import progressive_loader, render_performance_dashboard
+
+# Import performance optimizations with fallback
+try:
+    from performance_optimizations import perf_monitor, perf_optimizer, optimize_streamlit_config
+    PERFORMANCE_OPTIMIZATIONS_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_OPTIMIZATIONS_AVAILABLE = False
+    # Create dummy objects
+    class DummyPerfMonitor:
+        def start_timer(self, name): pass
+        def end_timer(self, name): pass
+    
+    perf_monitor = DummyPerfMonitor()
+    perf_optimizer = None
+    def optimize_streamlit_config(): pass
+
+# Import UI components with fallback
+try:
+    from ui.progressive_loader import progressive_loader, render_performance_dashboard
+    PROGRESSIVE_LOADER_AVAILABLE = True
+except ImportError:
+    PROGRESSIVE_LOADER_AVAILABLE = False
+    # Create dummy objects
+    class DummyProgressiveLoader:
+        def render_tabs_progressive(self, tab_data, max_initial_tabs=3): 
+            st.warning("Progressive loader not available - using standard tabs")
+    
+    progressive_loader = DummyProgressiveLoader()
+    def render_performance_dashboard(): pass
 
 # Import error handling components that are used in decorators
 try:
@@ -193,6 +220,32 @@ def initialize_session_state():
             if key not in st.session_state:
                 st.session_state[key] = value
 
+# Import infrastructure components with fallback
+try:
+    from infrastructure.monitoring.performance_monitor import get_performance_monitor
+    PERFORMANCE_MONITOR_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_MONITOR_AVAILABLE = False
+    def get_performance_monitor(): return None
+
+try:
+    from infrastructure.utilities.memory_optimizer import get_memory_optimizer
+    MEMORY_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    MEMORY_OPTIMIZER_AVAILABLE = False
+    class DummyMemoryOptimizer:
+        def optimize_memory(self, force=False): return {'status': 'unavailable', 'memory_saved_mb': 0}
+    def get_memory_optimizer(): return DummyMemoryOptimizer()
+
+try:
+    from resume_customizer.email.email_handler import get_email_manager
+    EMAIL_MANAGER_AVAILABLE = True
+except ImportError:
+    EMAIL_MANAGER_AVAILABLE = False
+    class DummyEmailManager:
+        def close_all_connections(self): pass
+    def get_email_manager(): return DummyEmailManager()
+
 @st.cache_resource
 def get_cached_performance_monitor():
     return get_performance_monitor()
@@ -209,9 +262,10 @@ def get_cached_config():
 def get_cached_email_manager():
     return get_email_manager()
 
+# Initialize components safely
 logger = get_cached_logger()
 performance_monitor = get_cached_performance_monitor()
-memory_optimizer = get_cached_memory_optimizer()
+memory_optimizer = get_cached_memory_optimizer() 
 email_manager = get_cached_email_manager()
 config = get_cached_config()
 
@@ -234,8 +288,8 @@ def check_application_health() -> Dict[str, Any]:
         import docx
         import io
         
-        # Check performance monitor
-        if not performance_monitor:
+            # Check performance monitor
+        if not PERFORMANCE_MONITOR_AVAILABLE or not performance_monitor:
             health_status['warnings'].append("Performance monitor not available")
         
         # Check memory usage
@@ -253,11 +307,14 @@ def check_application_health() -> Dict[str, Any]:
                     
                 # Attempt automatic cleanup
                 try:
-                    cleanup_result = memory_optimizer.optimize_memory(force=True)
-                    if cleanup_result['status'] == 'completed':
-                        health_status['warnings'].append(f"🧹 Memory cleanup performed - saved {cleanup_result['memory_saved_mb']:.1f}MB")
+                    if MEMORY_OPTIMIZER_AVAILABLE:
+                        cleanup_result = memory_optimizer.optimize_memory(force=True)
+                        if cleanup_result['status'] == 'completed':
+                            health_status['warnings'].append(f"🧹 Memory cleanup performed - saved {cleanup_result['memory_saved_mb']:.1f}MB")
+                        else:
+                            health_status['warnings'].append("🧹 Memory cleanup attempted")
                     else:
-                        health_status['warnings'].append("🧹 Memory cleanup attempted")
+                        health_status['warnings'].append("🧹 Memory optimization not available")
                 except Exception as e:
                     logger.warning(f"Memory optimization failed: {e}")
                     health_status['warnings'].append("⚠️ Memory cleanup failed - consider manual restart")
@@ -290,9 +347,28 @@ def render_requirements_tab():
         
         # Initialize requirements manager
         if 'requirements_manager' not in st.session_state:
-            st.session_state.requirements_manager = get_cached_requirements_manager()
+            manager = get_cached_requirements_manager()
+            if manager is None:
+                st.error("❌ Requirements manager not available. Please check that all dependencies are installed.")
+                return
+            st.session_state.requirements_manager = manager
         
         logger.info("Requirements tab rendered successfully")
+        
+        # Check if requirements functions are available
+        try:
+            from ui.requirements_manager import render_requirement_form, render_requirements_list
+            REQUIREMENTS_FUNCTIONS_AVAILABLE = True
+        except ImportError:
+            REQUIREMENTS_FUNCTIONS_AVAILABLE = False
+        
+        if not REQUIREMENTS_FUNCTIONS_AVAILABLE:
+            st.error("❌ Requirements management functions not available")
+            st.info("📝 Basic requirements interface will be shown instead")
+            st.text_area("Job Description", placeholder="Paste job description here...")
+            st.text_area("Required Skills", placeholder="List required skills...")
+            st.button("Save Requirement (Placeholder)", disabled=True)
+            return
         
         # Tabs for different views
         tab1, tab2 = st.tabs(["📝 Create/Edit Requirement", "📋 View Requirements"])
@@ -303,12 +379,19 @@ def render_requirements_tab():
             requirement_to_edit = None
             
             if edit_id and 'requirements_manager' in st.session_state:
-                requirement_to_edit = st.session_state.requirements_manager.get_requirement(edit_id)
-                if not requirement_to_edit:
-                    st.warning("The requirement you're trying to edit doesn't exist.")
+                try:
+                    requirement_to_edit = st.session_state.requirements_manager.get_requirement(edit_id)
+                    if not requirement_to_edit:
+                        st.warning("The requirement you're trying to edit doesn't exist.")
+                except Exception as e:
+                    st.warning(f"Could not load requirement for editing: {str(e)}")
             
             # Render the form
-            form_data = render_requirement_form(requirement_to_edit)
+            try:
+                form_data = render_requirement_form(requirement_to_edit)
+            except Exception as e:
+                st.error(f"Error rendering requirement form: {str(e)}")
+                return
             
             # Handle form submission
             if form_data:
@@ -317,7 +400,6 @@ def render_requirements_tab():
                         # Update existing requirement
                         if st.session_state.requirements_manager.update_requirement(edit_id, form_data):
                             st.success("✅ Requirement updated successfully!")
-                            # Don't use st.rerun() to prevent tab switching, just show success message
                         else:
                             st.error("Failed to update requirement. It may have been deleted.")
                     else:
@@ -326,25 +408,22 @@ def render_requirements_tab():
                         if requirement_id:
                             st.success("✅ Requirement created successfully!")
                             st.info(f"📝 Requirement ID: {requirement_id}")
-                            # Don't use st.rerun() to prevent tab switching
                         else:
                             st.error("Failed to create requirement. Please try again.")
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
                     logger.error(f"Error saving requirement: {str(e)}")
-                    # Add more detailed error information for debugging
-                    import traceback
-                    logger.error(f"Full traceback: {traceback.format_exc()}")
         
         with tab2:
-            render_requirements_list(st.session_state.requirements_manager)
+            try:
+                render_requirements_list(st.session_state.requirements_manager)
+            except Exception as e:
+                st.error(f"Error loading requirements list: {str(e)}")
+                st.info("Please try refreshing the page or check the application logs.")
             
     except Exception as e:
         st.error(f"An error occurred in the Requirements tab: {str(e)}")
         logger.error(f"Requirements tab error: {str(e)}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        
         # Provide fallback functionality
         st.info("There was an error loading the requirements manager. Please refresh the page.")
 
@@ -395,12 +474,20 @@ def main():
             force_refresh = True
     
     if 'resume_tab_handler' not in st.session_state or force_refresh:
-        from resume_customizer.processors.resume_processor import get_resume_manager
-        st.session_state.resume_tab_handler = ResumeTabHandler(resume_manager=get_resume_manager("v2.2"))
+        try:
+            from resume_customizer.processors.resume_processor import get_resume_manager
+            st.session_state.resume_tab_handler = ResumeTabHandler(resume_manager=get_resume_manager("v2.2"))
+        except ImportError as e:
+            logger.warning(f"Could not initialize resume tab handler: {e}")
+            st.session_state.resume_tab_handler = ResumeTabHandler()
     
     if 'bulk_processor' not in st.session_state or force_refresh:
-        from resume_customizer.processors.resume_processor import get_resume_manager
-        st.session_state.bulk_processor = BulkProcessor(resume_manager=get_resume_manager("v2.2"))
+        try:
+            from resume_customizer.processors.resume_processor import get_resume_manager
+            st.session_state.bulk_processor = BulkProcessor(resume_manager=get_resume_manager("v2.2"))
+        except ImportError as e:
+            logger.warning(f"Could not initialize bulk processor: {e}")
+            st.session_state.bulk_processor = BulkProcessor()
     
 
     # Validate configuration first
@@ -514,10 +601,20 @@ def main():
             # Sidebar components in organized container
             ui.render_sidebar()
             secure_ui.display_security_status()
-            display_logs_in_sidebar()
+            
+            # Display logs in sidebar with fallback
+            try:
+                from infrastructure.utilities.logger import display_logs_in_sidebar
+                display_logs_in_sidebar()
+            except ImportError:
+                pass  # Logs display not available
             
             # Add performance dashboard
-            render_performance_dashboard()
+            if PROGRESSIVE_LOADER_AVAILABLE:
+                render_performance_dashboard()
+            else:
+                with st.sidebar:
+                    st.info("📊 Performance dashboard not available")
             
             # Add About button in sidebar
             with st.sidebar:
@@ -641,16 +738,25 @@ def main():
                     # Use progressive loading for large file lists
                     st.info(f"📊 Processing {len(all_files)} files with progressive loading...")
                     
-                    # Convert files to tab data format
-                    tab_data = []
-                    for file_name, file_obj in all_files:
-                        tab_data.append({
-                            'label': file_name,
-                            'render_func': lambda f=file_obj: tab_handler.render_tab(f)
-                        })
-                    
-                    # Use progressive loader
-                    progressive_loader.render_tabs_progressive(tab_data, max_initial_tabs=3)
+                    if PROGRESSIVE_LOADER_AVAILABLE:
+                        # Convert files to tab data format
+                        tab_data = []
+                        for file_name, file_obj in all_files:
+                            tab_data.append({
+                                'label': file_name,
+                                'render_func': lambda f=file_obj: tab_handler.render_tab(f)
+                            })
+                        
+                        # Use progressive loader
+                        progressive_loader.render_tabs_progressive(tab_data, max_initial_tabs=3)
+                    else:
+                        # Fallback to standard tabs
+                        st.warning("Progressive loading not available - using standard tabs")
+                        tabs = st.tabs([f[0] for f in all_files[:5]])  # Limit to first 5
+                        for i, (file_name, file_obj) in enumerate(all_files[:5]):
+                            with tabs[i]:
+                                st.markdown(f"**📄 {file_name}**")
+                                tab_handler.render_tab(file_obj)
                     
                 elif len(all_files) > 1:
                     # Standard tabs for moderate file counts
@@ -836,7 +942,26 @@ def main():
             st.markdown("*Learn how to use the Resume Customizer effectively*")
             
         with st.container():
-            app_guide.render_main_tab()
+            # Use the lazy-loaded app guide
+            try:
+                app_guide = get_app_guide()
+                app_guide.render_main_tab()
+            except Exception as e:
+                st.error(f"❌ Could not load application guide: {str(e)}")
+                st.info("📝 Application guide is temporarily unavailable. Please check that application_guide.py exists and is properly configured.")
+                # Provide basic fallback content
+                st.markdown("""
+                ### 📚 Basic Application Guide
+                
+                **Welcome to the Resume Customizer!**
+                
+                1. **Upload Resume**: Upload your DOCX resume files
+                2. **Add Tech Stacks**: Provide technology details for each resume
+                3. **Process**: Use individual or bulk processing
+                4. **Download/Email**: Get your customized resumes
+                
+                For detailed instructions, please ensure the application guide module is available.
+                """)
 
     with tab_settings:
         # Enhanced Settings Tab with better UX
@@ -948,9 +1073,8 @@ def main():
                                 # Actual cleanup operations
                                 if i == 1:  # Memory optimization
                                     try:
-                                        background_manager = st.session_state.get('background_task_manager')
-                                        if background_manager:
-                                            task_id = background_manager.start_memory_cleanup()
+                                        if MEMORY_OPTIMIZER_AVAILABLE:
+                                            memory_optimizer.optimize_memory(force=True)
                                     except Exception:
                                         pass
                                 elif i == 2:  # Cache clearing
@@ -975,7 +1099,6 @@ def main():
             st.markdown("---")
             
             # Enhanced application health status with detailed metrics
-            st.markdown("---")
             st.subheader("🔍 Application Health Dashboard")
             
             # Health check with progress
@@ -1048,13 +1171,34 @@ def main():
             # Enhanced Monitoring Section
             st.subheader("📊 System Monitoring")
             
-            # Use enhanced metrics panel
-            ui.render_enhanced_metrics_panel()
+            # Use enhanced metrics panel with fallback
+            try:
+                ui.render_enhanced_metrics_panel()
+            except AttributeError:
+                st.info("📊 Enhanced metrics panel not available - showing basic monitoring")
+                if PERFORMANCE_MONITOR_AVAILABLE and performance_monitor:
+                    try:
+                        summary = performance_monitor.get_performance_summary()
+                        if summary:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("System Status", "Operational")
+                            with col2:
+                                st.metric("Monitoring", "Active")
+                    except Exception as e:
+                        st.warning(f"Performance monitoring error: {str(e)}")
+                else:
+                    st.warning("Performance monitoring not available")
             
             # Performance Summary with better UX
             if st.checkbox("Show Detailed Performance Data", value=False, key="settings_performance_checkbox"):
                 with st.spinner("🔍 Collecting performance data..."):
-                    summary = performance_monitor.get_performance_summary()
+                    summary = None
+                    if PERFORMANCE_MONITOR_AVAILABLE and performance_monitor:
+                        try:
+                            summary = performance_monitor.get_performance_summary()
+                        except Exception as e:
+                            st.warning(f"Could not collect performance data: {str(e)}")
                 
                 if summary.get('system'):
                     st.markdown("#### System Resources")
@@ -1273,11 +1417,15 @@ def cleanup_on_exit():
         cleanup_performance_monitor()
         
         # Cleanup document resources
-        from resume_customizer.processors.document_processor import cleanup_document_resources
-        cleanup_document_resources()
+        try:
+            from resume_customizer.processors.document_processor import cleanup_document_resources
+            cleanup_document_resources()
+        except ImportError:
+            pass
         
         # Cleanup email connections
-        email_manager.close_all_connections()
+        if EMAIL_MANAGER_AVAILABLE:
+            email_manager.close_all_connections()
         
         logger.info("Application cleanup completed")
     except Exception as e:
