@@ -7,13 +7,14 @@ showWarningOnDirectExecution = false
 # Server settings optimized for performance
 runOnSave = false
 port = 8501
-enableCORS = true
-enableXsrfProtection = true
+enableCORS = false
+enableXsrfProtection = false
 maxUploadSize = 200
 maxMessageSize = 200
 baseUrlPath = ""
 enableWebsocketCompression = true
 enableStaticServing = true
+headless = true
 
 [browser]
 # Browser settings optimized for performance
@@ -33,6 +34,8 @@ font = "sans serif"
 magicEnabled = true
 fastReruns = true
 enforceSerializableSessionState = false
+fixedWidthMode = false
+postProcessing = true
 
 [client]
 # Client-side optimizations

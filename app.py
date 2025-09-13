@@ -11,58 +11,131 @@ import time
 from io import BytesIO
 from typing import Dict, Any, Optional
 
-# Import custom modules
-from config import get_app_config, get_smtp_servers, get_default_email_subject, get_default_email_body, APP_CONFIG, validate_config
-from resume_customizer import parse_input_text, get_resume_manager, get_email_manager
-from resume_customizer.parsers.text_parser import LegacyParser
-from infrastructure.utilities.logger import get_logger, display_logs_in_sidebar
-from infrastructure.monitoring.performance_monitor import get_performance_monitor
-from infrastructure.utilities.retry_handler import get_retry_handler
-from infrastructure.security.validators import validate_session_state
+# Essential imports only - lazy load others
+from config import get_app_config, APP_CONFIG, validate_config
+from infrastructure.utilities.logger import get_logger
+from performance_optimizations import perf_monitor, perf_optimizer, optimize_streamlit_config
+from ui.progressive_loader import progressive_loader, render_performance_dashboard
 
-# Import refactored UI and handlers
-from ui.components import UIComponents
-from ui.secure_components import get_secure_ui_components
-from ui.resume_tab_handler import ResumeTabHandler
-from ui.bulk_processor import BulkProcessor
-from ui.requirements_manager import RequirementsManager, render_requirement_form, render_requirements_list
-from ui.utils import check_file_readiness, prepare_bulk_data
+# Import error handling components that are used in decorators
+try:
+    from enhancements.error_handling_enhanced import (
+        ErrorHandler, 
+        ErrorContext, 
+        ErrorSeverity,
+        handle_errors,
+        ErrorHandlerContext
+    )
+    ERROR_HANDLING_AVAILABLE = True
+except ImportError:
+    ERROR_HANDLING_AVAILABLE = False
+    # Create dummy decorators to prevent import errors
+    def handle_errors(operation_name, severity, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    
+    class ErrorSeverity:
+        HIGH = "high"
+        CRITICAL = "critical"
 
-# Import application guide
-from application_guide import app_guide
+# Import structured logging components
+try:
+    from infrastructure.utilities.structured_logger import (
+        get_structured_logger,
+        with_structured_logging,
+        log_performance,
+        app_logger
+    )
+    STRUCTURED_LOGGING_AVAILABLE = True
+except ImportError:
+    STRUCTURED_LOGGING_AVAILABLE = False
+    # Create dummy decorator
+    def with_structured_logging(module, operation):
+        def decorator(func):
+            return func
+        return decorator
 
-# Import async processing components
-from infrastructure.async_processing.async_integration import (
-    initialize_async_services,
-    process_documents_async,
-    get_async_results,
-    validate_files_async,
-    track_async_progress
-)
+# Import async processing components with fallback
+try:
+    from infrastructure.async_processing.async_integration import (
+        initialize_async_services,
+        process_documents_async,
+        get_async_results,
+        validate_files_async,
+        track_async_progress
+    )
+    ASYNC_PROCESSING_AVAILABLE = True
+except ImportError:
+    ASYNC_PROCESSING_AVAILABLE = False
+    # Create dummy functions to prevent import errors
+    def initialize_async_services():
+        return False
+    
+    def process_documents_async(documents):
+        return {'success': False, 'message': 'Async processing not available'}
+    
+    def get_async_results(task_ids):
+        return {'success': False, 'results': []}
+    
+    def validate_files_async(files):
+        return {'success': False, 'message': 'Async validation not available'}
+    
+    def track_async_progress():
+        pass
 
-# Import reliability and error handling
-from enhancements.error_handling_enhanced import (
-    ErrorHandler, 
-    ErrorContext, 
-    ErrorSeverity,
-    handle_errors,
-    ErrorHandlerContext
-)
+# Import UI handler components with fallback
+try:
+    from ui.resume_tab_handler import ResumeTabHandler
+    from ui.bulk_processor import BulkProcessor
+    UI_HANDLERS_AVAILABLE = True
+except ImportError:
+    UI_HANDLERS_AVAILABLE = False
+    # Create dummy classes to prevent import errors
+    class ResumeTabHandler:
+        def __init__(self, resume_manager=None):
+            self.resume_manager = resume_manager
+        
+        def render_tab(self, file_obj):
+            st.error("Resume tab handler not available")
+    
+    class BulkProcessor:
+        def __init__(self, resume_manager=None):
+            self.resume_manager = resume_manager
+        
+        def render_bulk_actions(self, files):
+            st.error("Bulk processor not available")
 
-# Import memory optimization
-from infrastructure.utilities.memory_optimizer import (
-    get_memory_optimizer,
-    with_memory_management,
-    memory_efficient_batch
-)
+# Lazy import globals - will be loaded when needed
+_ui_components = None
+_secure_ui_components = None
+_app_guide = None
+_resume_manager = None
+_email_manager = None
 
-# Import structured logging
-from infrastructure.utilities.structured_logger import (
-    get_structured_logger,
-    with_structured_logging,
-    log_performance,
-    app_logger
-)
+def get_ui_components():
+    """Lazy load UI components."""
+    global _ui_components
+    if _ui_components is None:
+        from ui.components import UIComponents
+        _ui_components = UIComponents()
+    return _ui_components
+
+def get_secure_ui_components():
+    """Lazy load secure UI components."""
+    global _secure_ui_components
+    if _secure_ui_components is None:
+        from ui.secure_components import get_secure_ui_components
+        _secure_ui_components = get_secure_ui_components()
+    return _secure_ui_components
+
+def get_app_guide():
+    """Lazy load application guide."""
+    global _app_guide
+    if _app_guide is None:
+        from application_guide import app_guide
+        _app_guide = app_guide
+    return _app_guide
 
 # Initialize components with caching
 @st.cache_resource
@@ -81,7 +154,7 @@ def get_cached_requirements_manager():
 @st.cache_resource
 def get_cached_ui_components():
     """Get cached UI components instance."""
-    return UIComponents()
+    return get_ui_components()
 
 @st.cache_resource
 def get_cached_secure_ui_components():
@@ -286,6 +359,12 @@ def main():
         initial_sidebar_state="expanded"
     )
     
+    # Apply Streamlit optimizations
+    optimize_streamlit_config()
+    
+    # Start performance monitoring
+    perf_monitor.start_timer("app_initialization")
+    
     # Preload essential modules for better performance
     try:
         from infrastructure.utilities.lazy_imports import preload_essential_modules, get_lazy_module_stats
@@ -353,8 +432,12 @@ def main():
         import uuid
         st.session_state.user_id = str(uuid.uuid4())
     
-    logger.info("Application started with cached components")
+    # End performance monitoring for initialization
+    perf_monitor.end_timer("app_initialization")
+    
+    logger.info("Application started with lazy-loaded components")
 
+    # Use lazy-loaded components
     ui = get_cached_ui_components()
     secure_ui = get_cached_secure_ui_components()
     # Use session state handlers to ensure consistency
@@ -403,8 +486,8 @@ def main():
         
         st.info("💡 **Tip:** You can also access this content anytime by clicking the '📚 Know About The Application' tab above.")
         
-        # Render the application guide directly (app_guide is already imported at top)
-        app_guide.render_main_tab()
+        # Render the application guide directly (lazy loaded)
+        get_app_guide().render_main_tab()
         
         # Stop processing the rest of the page when showing about content
         return
@@ -432,6 +515,9 @@ def main():
             ui.render_sidebar()
             secure_ui.display_security_status()
             display_logs_in_sidebar()
+            
+            # Add performance dashboard
+            render_performance_dashboard()
             
             # Add About button in sidebar
             with st.sidebar:
@@ -549,15 +635,27 @@ def main():
                 st.markdown("### 🔽 Resume Customization Inputs")
                 st.markdown("*Paste tech stack and key points for each resume below*")
                 
-            # Enhanced file processing with organized tabs
+            # Enhanced file processing with progressive loading
             with st.expander("📝 Resume Input Forms", expanded=True):
-                if len(all_files) > 3:
-                    st.info(f"📊 Processing {len(all_files)} files - This may take a moment...")
+                if len(all_files) > 5:
+                    # Use progressive loading for large file lists
+                    st.info(f"📊 Processing {len(all_files)} files with progressive loading...")
                     
-                tabs = st.tabs([f[0] for f in all_files])
-                
-                # Show processing progress for multiple files
-                if len(all_files) > 1:
+                    # Convert files to tab data format
+                    tab_data = []
+                    for file_name, file_obj in all_files:
+                        tab_data.append({
+                            'label': file_name,
+                            'render_func': lambda f=file_obj: tab_handler.render_tab(f)
+                        })
+                    
+                    # Use progressive loader
+                    progressive_loader.render_tabs_progressive(tab_data, max_initial_tabs=3)
+                    
+                elif len(all_files) > 1:
+                    # Standard tabs for moderate file counts
+                    tabs = st.tabs([f[0] for f in all_files])
+                    
                     with st.spinner(f"🔄 Loading {len(all_files)} resume tabs..."):
                         for i, (file_name, file_obj) in enumerate(all_files):
                             with tabs[i]:
@@ -567,10 +665,10 @@ def main():
                         
                         st.toast(f"📋 {len(all_files)} resume tabs loaded!", icon="📝")
                 else:
-                    # Single file - no progress needed
+                    # Single file - direct rendering
                     for i, (file_name, file_obj) in enumerate(all_files):
-                        with tabs[i]:
-                            tab_handler.render_tab(file_obj)
+                        st.markdown(f"**📄 {file_name}**")
+                        tab_handler.render_tab(file_obj)
             
             # Enhanced bulk operations section with modern layout
             st.markdown("---")

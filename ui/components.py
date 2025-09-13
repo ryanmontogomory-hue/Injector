@@ -57,7 +57,6 @@ class UIComponents:
             with col1:
                 if st.button("🔍 Health Check", help="Comprehensive system check", use_container_width=True):
                     with st.spinner("🔄 Analyzing system..."):
-                        time.sleep(0.5)
                         
                         # Enhanced health checks
                         checks = {
@@ -163,12 +162,11 @@ class UIComponents:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                # Validate files with progress
+                # Validate files with progress (removed artificial delay)
                 for i, file in enumerate(uploaded_files):
                     progress = (i + 1) / len(uploaded_files)
                     progress_bar.progress(progress)
                     status_text.text(f"Validating {file.name}... ({i+1}/{len(uploaded_files)})")
-                    time.sleep(0.1)  # Brief pause for visual feedback
                 
                 # Perform actual validation
                 validation_result = file_validator.validate_batch(uploaded_files)
