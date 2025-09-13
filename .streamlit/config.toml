@@ -4,17 +4,19 @@ developmentMode = false
 showWarningOnDirectExecution = false
 
 [server]
-# Server settings optimized for performance
+# Ultra-fast server settings for maximum performance
 runOnSave = false
+allowRunOnSave = false
 port = 5000
 enableCORS = false
 enableXsrfProtection = false
-maxUploadSize = 200
-maxMessageSize = 200
+maxUploadSize = 50  # Reduced for speed
+maxMessageSize = 50  # Reduced for speed
 baseUrlPath = ""
 enableWebsocketCompression = true
 enableStaticServing = false
 headless = true
+fileWatcherType = "none"  # Disable file watching for speed
 
 [browser]
 # Browser settings optimized for performance
@@ -30,10 +32,11 @@ textColor = "#262730"
 font = "sans serif"
 
 [runner]
-# Performance optimizations
-magicEnabled = true
+# Ultra-fast performance optimizations
+magicEnabled = false  # Disable magic for speed
 fastReruns = true
 enforceSerializableSessionState = false
+# installTracer removed - not a valid option
 
 [client]
 # Client-side optimizations

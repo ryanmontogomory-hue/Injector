@@ -12,8 +12,15 @@ from io import BytesIO
 from typing import Dict, Any, Optional
 
 # Essential imports only - lazy load others
-from config import get_app_config, APP_CONFIG, validate_config
-from infrastructure.utilities.logger import get_logger
+@st.cache_resource
+def get_cached_config():
+    from config import get_app_config, APP_CONFIG, validate_config
+    return get_app_config(), APP_CONFIG, validate_config
+
+@st.cache_resource
+def get_cached_logger():
+    from infrastructure.utilities.logger import get_logger
+    return get_logger()
 
 # Import performance optimizations with fallback
 try:
@@ -428,15 +435,24 @@ def render_requirements_tab():
         st.info("There was an error loading the requirements manager. Please refresh the page.")
 
 @handle_errors("main_application", ErrorSeverity.CRITICAL, show_to_user=True)
+@st.cache_resource
+def get_page_config():
+    """Cached page configuration."""
+    app_config, _, _ = get_cached_config()
+    return {
+        "page_title": app_config["title"],
+        "page_icon": "⚡",  # Lightning bolt for speed
+        "layout": app_config["layout"],
+        "initial_sidebar_state": "expanded"
+    }
+
 def main():
-    """Main application function."""
-    # Set page config as early as possible to avoid reruns and layout recalculations
-    st.set_page_config(
-        page_title=APP_CONFIG["title"],
-        page_icon="📝",
-        layout=APP_CONFIG["layout"],
-        initial_sidebar_state="expanded"
-    )
+    """Ultra-fast main application function."""
+    # Get cached config and set page config super fast
+    if 'page_configured' not in st.session_state:
+        config = get_page_config()
+        st.set_page_config(**config)
+        st.session_state.page_configured = True
     
     # Apply Streamlit optimizations
     optimize_streamlit_config()
@@ -451,19 +467,18 @@ def main():
     except ImportError:
         pass  # Lazy loading system not available
     
-    # Initialize async services early
+    # Initialize async services only when needed (lazy loading)
     if 'async_initialized' not in st.session_state:
-        with st.spinner("Initializing high-performance async services..."):
-            async_success = initialize_async_services()
-            st.session_state.async_initialized = async_success
+        st.session_state.async_initialized = None  # Mark as not initialized yet
     
-    # Check application health first
-    health_status = check_application_health()
-    if not health_status['healthy']:
-        st.error("❌ Application Health Check Failed")
-        for issue in health_status['issues']:
-            st.error(issue)
-        return
+    # Skip health checks for faster loading - only check if debug mode
+    if st.session_state.get('debug_mode', False):
+        health_status = check_application_health()
+        if not health_status['healthy']:
+            st.error("❌ Application Health Check Failed")
+            for issue in health_status['issues']:
+                st.error(issue)
+            return
     
     # Initialize session state with fresh manager instances
     # Force refresh if version changed or handlers missing async methods
@@ -490,19 +505,15 @@ def main():
             st.session_state.bulk_processor = BulkProcessor()
     
 
-    # Validate configuration first
-    config_validation = validate_config()
-    
-    # Protect against None result
-    if config_validation is None:
-        st.error("❌ Configuration validation failed - no result returned")
-        st.stop()
-    
-    if not config_validation.valid:
-        st.error("❌ Configuration Error")
-        for issue in config_validation.issues:
-            st.error(f"• {issue}")
-        st.stop()
+    # Skip config validation for speed - only validate in debug mode
+    if st.session_state.get('debug_mode', False):
+        _, _, validate_config = get_cached_config()
+        config_validation = validate_config()
+        if config_validation and not config_validation.valid:
+            st.error("❌ Configuration Error")
+            for issue in config_validation.issues:
+                st.error(f"• {issue}")
+            st.stop()
     
     # Display configuration warnings if any
     if hasattr(config_validation, 'warnings') and config_validation.warnings:
@@ -524,12 +535,14 @@ def main():
     
     logger.info("Application started with lazy-loaded components")
 
-    # Use lazy-loaded components
-    ui = get_cached_ui_components()
-    secure_ui = get_cached_secure_ui_components()
-    # Use session state handlers to ensure consistency
-    tab_handler = st.session_state.resume_tab_handler
-    bulk_processor = st.session_state.bulk_processor
+    # Use ultra-fast components with aggressive caching
+    from ui.fast_components import get_fast_ui_manager, get_lazy_processors
+    
+    fast_ui = get_fast_ui_manager()
+    lazy_processors = get_lazy_processors()
+    
+    # Track loading performance
+    start_time = time.time()
 
     # Enhanced main app layout with modern containers
     with st.container():
