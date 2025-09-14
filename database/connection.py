@@ -16,8 +16,15 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError, OperationalError
 from sqlalchemy.pool import QueuePool
-import psycopg2
-from psycopg2 import OperationalError as PsycopgOperationalError
+
+# Handle psycopg2 import gracefully
+try:
+    import psycopg2
+    from psycopg2 import OperationalError as PsycopgOperationalError
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
+    PsycopgOperationalError = Exception
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,8 +92,8 @@ class DatabaseConnectionManager:
             engine_config = {
                 'echo': False,  # Set to True for SQL debugging
                 'poolclass': QueuePool,
-                'pool_size': 20,  # Base pool size for concurrent connections
-                'max_overflow': 30,  # Additional connections when needed
+                'pool_size': 10,  # Optimized for Replit/cloud environments
+                'max_overflow': 20,  # Additional connections when needed
                 'pool_timeout': 30,  # Timeout for getting connection from pool
                 'pool_recycle': 3600,  # Recycle connections every hour
                 'pool_pre_ping': True,  # Verify connections before use
@@ -94,7 +101,7 @@ class DatabaseConnectionManager:
                 'connect_args': {
                     'connect_timeout': 10,
                     'application_name': 'ResumeCustomizer',
-                    'sslmode': 'require',  # Required for Replit/Neon databases
+                    'sslmode': 'prefer',  # More flexible SSL mode
                     'options': '-c statement_timeout=60000'  # 60 second query timeout
                 },
                 **kwargs

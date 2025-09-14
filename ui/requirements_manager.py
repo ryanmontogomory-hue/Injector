@@ -91,7 +91,12 @@ class RequirementsManager:
     def create_requirement(self, requirement_data: Dict[str, Any]) -> str:
         """Create a new requirement with comprehensive data structure."""
         if self.use_database:
-            return self.db_manager.create_requirement(requirement_data)
+            try:
+                return self.db_manager.create_requirement(requirement_data)
+            except Exception as e:
+                logger.error(f"Database create failed: {e}")
+                st.error(f"❌ Database error: {e}")
+                raise
         
         # Original JSON-based implementation
         try:
@@ -108,7 +113,7 @@ class RequirementsManager:
             
             # Basic requirement fields
             if 'req_status' not in requirement_data:
-                requirement_data['req_status'] = 'New working'
+                requirement_data['req_status'] = 'New'
             if 'applied_for' not in requirement_data:
                 requirement_data['applied_for'] = 'Raju'
             if 'tax_type' not in requirement_data:
@@ -162,19 +167,28 @@ class RequirementsManager:
             return requirement_id
         except Exception as e:
             logger.error(f"Error creating requirement: {e}")
-            st.error("Failed to create requirement. Please check logs for details.")
+            st.error(f"❌ Failed to create requirement: {e}")
             raise
     
     def get_requirement(self, requirement_id: str) -> Optional[Dict[str, Any]]:
         """Get a requirement by ID."""
         if self.use_database:
-            return self.db_manager.get_requirement(requirement_id)
+            try:
+                return self.db_manager.get_requirement(requirement_id)
+            except Exception as e:
+                logger.error(f"Database get failed: {e}")
+                return None
         return self.requirements.get(requirement_id)
     
     def update_requirement(self, requirement_id: str, update_data: Dict[str, Any]) -> bool:
         """Update an existing requirement."""
         if self.use_database:
-            return self.db_manager.update_requirement(requirement_id, update_data)
+            try:
+                return self.db_manager.update_requirement(requirement_id, update_data)
+            except Exception as e:
+                logger.error(f"Database update failed: {e}")
+                st.error(f"❌ Database update error: {e}")
+                return False
         
         # Original JSON-based implementation
         try:
@@ -192,13 +206,18 @@ class RequirementsManager:
             return True
         except Exception as e:
             logger.error(f"Error updating requirement {requirement_id}: {e}")
-            st.error("Failed to update requirement. Please check logs for details.")
+            st.error(f"❌ Failed to update requirement: {e}")
             return False
     
     def delete_requirement(self, requirement_id: str) -> bool:
         """Delete a requirement."""
         if self.use_database:
-            return self.db_manager.delete_requirement(requirement_id)
+            try:
+                return self.db_manager.delete_requirement(requirement_id)
+            except Exception as e:
+                logger.error(f"Database delete failed: {e}")
+                st.error(f"❌ Database delete error: {e}")
+                return False
         
         # Original JSON-based implementation
         if requirement_id in self.requirements:
@@ -210,7 +229,11 @@ class RequirementsManager:
     def list_requirements(self) -> List[Dict[str, Any]]:
         """List all requirements."""
         if self.use_database:
-            return self.db_manager.list_requirements()
+            try:
+                return self.db_manager.list_requirements()
+            except Exception as e:
+                logger.error(f"Database list failed: {e}")
+                return []
         return list(self.requirements.values())
     
     def export_requirements(self) -> str:

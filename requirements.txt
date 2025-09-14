@@ -11,7 +11,6 @@ PyPDF2
 # Database Dependencies
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
-psycopg[pool]>=3.1.0
 alembic>=1.12.0
 sqlalchemy-utils>=0.41.0
 
@@ -44,32 +43,4 @@ tqdm
 colorama
 
 # Email & Communication
-yagmail
-alembic
-celery
-colorama
-concurrent-log-handler
-cryptography
-mammoth
-numpy
-pandas
-passlib
-psutil
-psycopg
-psycopg2-binary
-PyPDF2
-python-dateutil
-python-docx
-python-dotenv
-python-jose
-python-magic
-python-multipart
-python-pptx
-pytz
-redis
-sqlalchemy
-sqlalchemy-utils
-streamlit
-structlog
-tqdm
 yagmail

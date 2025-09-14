@@ -5,7 +5,7 @@ Comprehensive PostgreSQL models with high performance and scalability features
 
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean, JSON, 
-    ForeignKey, Index, UniqueConstraint, CheckConstraint
+    ForeignKey, Index, UniqueConstraint, CheckConstraint, create_engine
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -114,6 +114,8 @@ class Requirement(BaseModel):
         Index('idx_created_status', 'created_at', req_status),
         Index('idx_tech_stack_gin', tech_stack, postgresql_using='gin'),  # GIN index for JSONB queries
         Index('idx_requirement_search', job_title, client_company, primary_tech_stack),
+        # Full-text search index
+        Index('idx_job_description_fts', complete_job_description, postgresql_using='gin'),
     )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -147,6 +149,18 @@ class Requirement(BaseModel):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'version': self.version,
             'is_active': self.is_active
+            # Legacy compatibility fields
+            'job_title': self.job_title,
+            'client': self.client_company,
+            'prime_vendor': self.prime_vendor_company,
+            'status': self.req_status,
+            'next_steps': self.next_step,
+            'vendor_info': {
+                'name': self.vendor_person_name,
+                'company': self.vendor_company,
+                'phone': self.vendor_phone_number,
+                'email': self.vendor_email
+            }
         }
 
 class RequirementComment(BaseModel):
